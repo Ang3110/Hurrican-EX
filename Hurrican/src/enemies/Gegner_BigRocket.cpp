@@ -108,7 +108,7 @@ void GegnerBigRocket::GegnerExplode() {
     // Nur explodieren lassen, wenn Rakete zu sehen ist
     //
     if (!(yPos + 350.0f < TileEngine.YOffset)) {
-        ShakeScreen(5.0f);
+        ShakeAtCenter(5.0f);
 
         SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION1);
         SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION3);

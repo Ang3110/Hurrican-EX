@@ -43,7 +43,8 @@ void GegnerReitFlugsack::DoDraw() {
                                            mirror);
 
     if (Handlung == GEGNER::SPECIAL) {
-        ArrowCount -= Timer.sync(0.2f);
+        if (AdvanceDrawEffects)
+            ArrowCount -= Timer.sync(0.2f);
         if (ArrowCount < 0.0f)
             ArrowCount = 2.0f;
 

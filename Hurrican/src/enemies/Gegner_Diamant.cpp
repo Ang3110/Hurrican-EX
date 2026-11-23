@@ -103,7 +103,7 @@ void GegnerDiamant::DoKI() {
 
             Player[0].Score += 100;         // Punkte erhöhen
             Player[0].CollectedDiamonds++;  // Zahl gesammelter Diamanten erhöhen
-            Player[0].DiamondsThisLevel++;
+            Player[i].DiamondsThisLevel++;
             Player[0].DiamondsFullGame++;
             if (Player[0].CollectedDiamonds  // Limit überchritten ?
                 >= DIAMONDS_FOR_EXTRALIFE) {
@@ -125,6 +125,7 @@ void GegnerDiamant::DoKI() {
                 }
             }
             Energy = 0.0f;
+            break;
         }
 }
 

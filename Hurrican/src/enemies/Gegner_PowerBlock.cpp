@@ -89,8 +89,7 @@ void GegnerPowerBlock::DoKI() {
     // Bei Treffer erscheinen lassen
     if (DamageTaken != 0.0f && AnimPhase == 0) {
         AnimPhase = 1;
-        Player[0].BlocksFullGame++;
-        Player[0].BlocksThisLevel++;
+        RecordPowerBlock(firstAttacker);
         Energy = 12.0f;
     }
 

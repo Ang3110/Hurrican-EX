@@ -35,7 +35,8 @@ void GegnerDeckenKrabbe::DoDraw() {
                                                   0xFFFFFFFF, mirror);
 
     // Testen, ob der Spieler die Krabbe berührt hat
-    TestDamagePlayers(Timer.sync(8.0f));
+    if (AdvanceDrawEffects)
+        TestDamagePlayers(Timer.sync(8.0f));
 }
 
 // --------------------------------------------------------------------------------------

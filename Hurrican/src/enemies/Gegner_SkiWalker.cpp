@@ -112,7 +112,6 @@ void GegnerSkiWalker::DoKI() {
                 if (ySpeed > 0.0f)
                     ySpeed = -ySpeed / 2;
                 if (ySpeed > -2.0f) {
-                    TileEngine.BlockUnten(xPos, yPos, xSpeed, ySpeed, GegnerRect[GegnerArt]);
                     ySpeed = 0.0f;
                     yAcc = 0.0f;
                     Handlung = GEGNER::LAUFEN;
@@ -132,7 +131,6 @@ void GegnerSkiWalker::DoKI() {
                 yAcc = 0.0f;
                 ySpeed = 0.0f;
                 xSpeed = 43.0f * Direction::asInt(BlickRichtung);
-                TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
             }
         } break;
 

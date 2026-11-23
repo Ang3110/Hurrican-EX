@@ -68,20 +68,9 @@ void GegnerStachelbeere::DoDraw() {
 // --------------------------------------------------------------------------------------
 
 void GegnerStachelbeere::DoKI() {
-    // Schrägen checken
-    //
-    if (ySpeed >= 0.0f)
-        // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-        // blocku = TileEngine.BlockSlopes(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt], ySpeed);
-        blocku = TileEngine.BlockSlopes(xPos, yPos, GegnerRect[GegnerArt], ySpeed);
-
     // Runterfallen?
-    if (!(blocku & BLOCKWERT_SCHRAEGE_R) && !(blocku & BLOCKWERT_SCHRAEGE_L)) {
-        blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-
-        if (!(blocku & BLOCKWERT_WAND) && !(blocku & BLOCKWERT_PLATTFORM))
-            yAcc = 8.0f;
-    }
+    if (!(blocku & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM | BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R)))
+        yAcc = 8.0f;
 
     // AnimSpeed passend zur Bewegugnsgeschwindigkeit setzen
     if (Handlung == GEGNER::LAUFEN || Handlung == GEGNER::LAUFEN2) {

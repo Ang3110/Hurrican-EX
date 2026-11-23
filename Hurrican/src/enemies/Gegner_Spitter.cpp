@@ -21,7 +21,6 @@ GegnerSpitter::GegnerSpitter(int Wert1, int Wert2, bool Light) {
     Value2 = Wert2;
     ChangeLight = Light;
     Destroyable = true;
-    TestBlock = false;
 }
 
 // --------------------------------------------------------------------------------------
@@ -29,10 +28,6 @@ GegnerSpitter::GegnerSpitter(int Wert1, int Wert2, bool Light) {
 // --------------------------------------------------------------------------------------
 
 void GegnerSpitter::DoKI() {
-    blockl = TileEngine.BlockLinks(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-    blockr = TileEngine.BlockRechts(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-    blocko = TileEngine.BlockOben(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-
     // Animieren
     if (AnimEnde > 0)  // Soll überhaupt anmiert werden ?
     {
@@ -75,28 +70,13 @@ void GegnerSpitter::DoKI() {
         xAcc = 0.0f;
     }
 
-    if (ySpeed >= 0.0f)
-        // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-        // blocku = TileEngine.BlockSlopes(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt], ySpeed);
-        blocku = TileEngine.BlockSlopes(xPos, yPos, GegnerRect[GegnerArt], ySpeed);
-
-    // runterfallen?
-    //
-
-    if (!(blocku & BLOCKWERT_SCHRAEGE_R) && !(blocku & BLOCKWERT_SCHRAEGE_L)) {
-        blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-
-        if (!(blocku & BLOCKWERT_WAND) && !(blocku & BLOCKWERT_PLATTFORM)) {
-            if (ySpeed == 0.0f)
-                ySpeed = 5.0f;
-
-            yAcc = 3.0f;
-        }
-
-        else {
-            ySpeed = 0.0f;
-            yAcc = 0.0f;
-        }
+    if (blocku & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM | BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R)) {
+        ySpeed = 0.0f;
+        yAcc = 0.0f;
+    } else {
+        if (ySpeed == 0.0f)
+            ySpeed = 5.0f;
+        yAcc = 3.0f;
     }
 
     // An der Wand umdrehen

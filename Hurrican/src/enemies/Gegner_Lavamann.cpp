@@ -50,13 +50,6 @@ void GegnerLavamann::DoDraw() {
 void GegnerLavamann::DoKI() {
     SimpleAnimation();
 
-    // Schrägen checken
-    //
-    if (ySpeed >= 0.0f)
-        // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-        // blocku = TileEngine.BlockSlopes(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt], ySpeed);
-        blocku = TileEngine.BlockSlopes(xPos, yPos, GegnerRect[GegnerArt], ySpeed);
-
     // Flammenwand entstehen lassen
     //
     FlameCount -= Timer.sync(1.0f);
@@ -64,8 +57,6 @@ void GegnerLavamann::DoKI() {
         FlameCount = 0.5f;
         Projectiles.PushProjectile(xPos - 10.0f - xSpeed * 0.75f, yPos, FEUERFALLE_LAVAMANN);
     }
-
-    blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
 
     // In Richtung Spieler laufen, wenn angeschossen
     //
@@ -81,22 +72,19 @@ void GegnerLavamann::DoKI() {
 
     // runterfallen?
     //
+    const bool onSlope = blocku & (BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R);
+    const bool onGround = onSlope || (blocku & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM));
     if (Handlung != GEGNER::STEHEN) {
-        if (!(blocku & BLOCKWERT_SCHRAEGE_R) && !(blocku & BLOCKWERT_SCHRAEGE_L)) {
-            blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
+        if (onGround) {
+            ySpeed = 0.0f;
+            yAcc = 0.0f;
+        } else {
+            if (ySpeed == 0.0f)
+                ySpeed = 5.0f;
+            yAcc = 3.0f;
+        }
 
-            if (!(blocku & BLOCKWERT_WAND) && !(blocku & BLOCKWERT_PLATTFORM)) {
-                if (ySpeed == 0.0f)
-                    ySpeed = 5.0f;
-
-                yAcc = 3.0f;
-            }
-
-            else {
-                ySpeed = 0.0f;
-                yAcc = 0.0f;
-            }
-
+        if (!onSlope) {
             // Nach links bzw rechts auf Kollision prüfen und ggf umdrehen
             if (BlickRichtung == DirectionEnum::LINKS)
                 if (blockl & BLOCKWERT_WAND || blockl & BLOCKWERT_GEGNERWAND) {
@@ -129,7 +117,7 @@ void GegnerLavamann::DoKI() {
                 ySpeed = 25.0f;
 
             // Testen, ob der Lavamann auf den Boden kommt
-            if (blocku & BLOCKWERT_WAND || blocku & BLOCKWERT_PLATTFORM) {
+            if (onGround) {
                 Handlung = GEGNER::LAUFEN;
                 yAcc = 0.0f;
                 ySpeed = 0.0f;

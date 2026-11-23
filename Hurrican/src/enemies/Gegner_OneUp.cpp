@@ -84,7 +84,7 @@ void GegnerOneUp::DoKI() {
             Player[0].Score += 1000;  // Punkte vergeben
             Player[i].Lives++;        // Anzahl der Leben erhöhen
             Player[0].LivesFullGame++;
-            Player[0].LivesThisLevel++;
+            Player[i].LivesThisLevel++;
             Energy = 0.0f;  // Und Leben verschwinden lassen
 
             PartikelSystem.PushPartikel(xPos - 40.0f, yPos - 40.0f, EXPLOSIONFLARE);
@@ -92,6 +92,7 @@ void GegnerOneUp::DoKI() {
 
             for (int j = 0; j < 200; j++)
                 PartikelSystem.PushPartikel(xPos + 20.0f, yPos + 20.0f, KRINGELSECRET);
+            break;
         }
 }
 

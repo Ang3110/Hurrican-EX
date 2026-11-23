@@ -56,8 +56,6 @@ void GegnerWalker::DoKI() {
                 Energy = 0;
         }
 
-    blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-
     // In Richtung Spieler laufen, wenn angeschossen
     //
     if (DamageTaken > 0 && Handlung != GEGNER::WATSCHELN && Handlung != GEGNER::SPRINGEN) {
@@ -193,7 +191,6 @@ void GegnerWalker::DoKI() {
                 yAcc = 5.0f;
 
                 SoundManager.PlayWave(100, 128, 11025, SOUND::WALKERGIGGLE);
-                blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
                 yPos -= 5.0f;
             }
         }
