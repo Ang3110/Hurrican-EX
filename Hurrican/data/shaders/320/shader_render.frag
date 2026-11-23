@@ -3,6 +3,8 @@ in vec4 v_Color;
 in vec2 v_Texcoord0;
 uniform sampler2D u_Texture0;
 uniform int u_Time;
+uniform int u_OutputWidth;
+uniform int u_OutputHeight;
 /* Output */
 out vec4 v_FragColor;
 
@@ -83,7 +85,7 @@ void main()
     /* Color bleeding */
     vec4 p;
     if (c_color_bleed == 1) {
-        float pixel_size = 1.0/float(c_WindowWidth)*bleeding_range;
+        float pixel_size = 1.0/float(u_OutputWidth)*bleeding_range;
         vec4 current_color = texture2D(u_Texture0, xy) * color;
         vec4 color_left = texture2D(u_Texture0,vec2(xy.x-pixel_size, xy.y)) * color;
         p = get_color_bleeding(current_color,color_left);
@@ -93,7 +95,7 @@ void main()
 
     /* Add scanlines */
     if (c_scanlines == 1) {
-        float r = float(c_WindowHeight / 216);
+        float r = max(1.0, float(u_OutputHeight / 216));
         float f = mod(gl_FragCoord.y, r) / r;
         v_FragColor = mix(p, vec4(p.rgb * 0.5, p.a), f);
     } else {
