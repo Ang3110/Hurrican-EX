@@ -106,10 +106,8 @@ void GegnerBigFish::NewAction() {
 
     // Spieler rechts vom Fisch? Dann den Fisch bewegen
     if (pAim->xpos > xPos) {
-        float newx = pAim->xpos;
-
-        if (newx > Value1 + 400)
-            newx = static_cast<float>(Value1) + 400.0f;
+        const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
+        const float newx = std::min(pAim->xpos, arena.right - 240.0f);
 
         MoveTo(newx, static_cast<float>(Value2) + 200.0f);
     }
@@ -196,15 +194,17 @@ void GegnerBigFish::DoDraw() {
                                                col);
 
         // Flossen bewegen
-        float fact = (xSpeed * xSpeed + ySpeed * ySpeed + 20.0f) / 200.0f;
+        if (AdvanceDrawEffects) {
+            float fact = (xSpeed * xSpeed + ySpeed * ySpeed + 20.0f) / 200.0f;
 
-        FlossenSin += Timer.sync(fact);
-        if (FlossenSin > TWO_PI)
-            FlossenSin = 0.0f;
+            FlossenSin += Timer.sync(fact);
+            if (FlossenSin > TWO_PI)
+                FlossenSin = 0.0f;
 
-        FlossenSin2 += Timer.sync(fact);
-        if (FlossenSin2 > TWO_PI)
-            FlossenSin2 = 0.0f;
+            FlossenSin2 += Timer.sync(fact);
+            if (FlossenSin2 > TWO_PI)
+                FlossenSin2 = 0.0f;
+        }
     }
 
     // DirectGraphics.SetColorKeyMode();
@@ -216,6 +216,7 @@ void GegnerBigFish::DoDraw() {
 // --------------------------------------------------------------------------------------
 
 void GegnerBigFish::DoKI() {
+    const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
     static bool IsKugel = false;
 
     KugelCount -= Timer.sync(1.0f);
@@ -235,11 +236,11 @@ void GegnerBigFish::DoKI() {
             LeftOrRight *= -1;
 
         if (IsKugel)
-            Gegner.PushGegner(TileEngine.XOffset + 300.0f + static_cast<float>(300 * LeftOrRight),
+            Gegner.PushGegner(LeftOrRight < 0 ? arena.left : arena.right - 40.0f,
                               TileEngine.YOffset + 200.0f,
                               KUGELKLEIN + Art, 5, 0, false);
         else
-            Gegner.PushGegner(TileEngine.XOffset + 300.0f + static_cast<float>(320 * LeftOrRight),
+            Gegner.PushGegner(LeftOrRight < 0 ? arena.left - 20.0f : arena.right - 20.0f,
                               TileEngine.YOffset + 350.0f,
                               SWIMWALKER, 5, 0, false);
         IsKugel = !IsKugel;
@@ -257,7 +258,7 @@ void GegnerBigFish::DoKI() {
 
     // Levelausschnitt auf den Boss zentrieren, sobald dieser sichtbar wird
     if (Active && Handlung != GEGNER::EXPLODIEREN && TileEngine.Zustand == TileStateEnum::SCROLLBAR && Energy > 0.0f) {
-        TileEngine.ScrollLevel(Value1, Value2, TileStateEnum::SCROLLTOLOCK);  // Level auf die Faust zentrieren
+        TileEngine.ScrollBossArena(Value1, Value2);  // Level auf die Faust zentrieren
         SoundManager.FadeSong(MUSIC::STAGEMUSIC, -2.0f, 0, true);       // Ausfaden und pausieren
         xPos += 400;
     }
@@ -314,11 +315,11 @@ void GegnerBigFish::DoKI() {
                 DamageTaken = 0.0f;
 
                 NewAction();
-                MoveTo(static_cast<float>(Value1 + 450), yPos);
+                MoveTo(arena.right - 190.0f, yPos);
             } break;
 
             case GEGNER::LAUFEN: {
-                MoveTo(static_cast<float>(Value1 + 50 + GetRandom(300)),
+                MoveTo(arena.left + 50.0f + GetRandom(std::max(1, static_cast<int>(arena.right - arena.left) - 340)),
                        static_cast<float>(Value2 + 50 + GetRandom(200)));
                 ShotCount--;
 
@@ -420,9 +421,9 @@ void GegnerBigFish::GegnerExplode() {
                           yPos + 30.0f + static_cast<float>(GetRandom(80)), PIRANHA, 99, 0, false);
 
     for (int i = 0; i < NUMPLAYERS; i++)
-        DirectInput.Joysticks[Player[i].JoystickIndex].ForceFeedbackEffect(FFE_BIGRUMBLE);
+        Player[i].PlayFeedback(FFE_BIGRUMBLE);
 
-    ShakeScreen(4);
+    ShakeAtCenter(4);
 
     Player[0].Score += 5000;
 }

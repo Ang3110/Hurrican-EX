@@ -70,7 +70,7 @@ void GegnerMetalHead::DoDraw() {
             pGegnerGrafix[GegnerArt]->RenderSpriteRotated(xPos - TileEngine.XOffset,
                                                           yPos - TileEngine.YOffset, Eye_Alpha / PI * 180.0f,
                                                           0xFFFFFFFF);
-        else {
+        else if (AdvanceDrawEffects && !TileEngine.IsCoopSplit()) {
             xSpeed = 0.0f;
             ySpeed = 0.0f;
             xPos = TileEngine.XOffset;
@@ -348,7 +348,7 @@ void GegnerMetalHead::DoKI() {
                                             yPos + 202.0f, KAPUTTETURBINE);
 
                 SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
-                ShakeScreen(3.0f);
+                ShakeAtCenter(3.0f);
             }
         }
 
@@ -467,7 +467,7 @@ void GegnerMetalHead::DoKI() {
                     xAcc = 0.0f;
                     yAcc = -1.0f;
 
-                    ShakeScreen(5.0f);
+                    ShakeAtCenter(5.0f);
                     SoundManager.PlayWave(100, 128, 11025, SOUND::STONEEXPLODE);
 
                     // Schleimboller spawnen?

@@ -31,14 +31,14 @@ GegnerStahlfaust::GegnerStahlfaust(int Wert1, int Wert2, bool Light) {
 // --------------------------------------------------------------------------------------
 
 void GegnerStahlfaust::DoKI() {
+    const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
     // Energie anzeigen
     if (Handlung != GEGNER::INIT && Handlung != GEGNER::EXPLODIEREN)
         HUD.ShowBossHUD(4000, Energy);
 
     // Levelausschnitt auf die Faust zentrieren, sobald dieses sichtbar wird
     if (Active == true && TileEngine.Zustand == TileStateEnum::SCROLLBAR) {
-        TileEngine.ScrollLevel(static_cast<float>(Value1), static_cast<float>(Value2),
-                               TileStateEnum::SCROLLTOLOCK);  // Level auf die Faust zentrieren
+        TileEngine.ScrollBossArena(static_cast<float>(Value1), static_cast<float>(Value2));  // Level auf die Faust zentrieren
         yPos -= 300;                                   // und Faust aus dem Screen setzen
         Handlung = GEGNER::INIT;
 
@@ -112,11 +112,11 @@ void GegnerStahlfaust::DoKI() {
             AnimCount -= Timer.getSpeedFactor();
 
             // Rechts vom Spieler oder zu nahe am rechten Rand ?
-            if (pAim->xpos + pAim->CollideRect.right < xPos || xPos > TileEngine.ScrolltoX + 480)
+            if (pAim->xpos + pAim->CollideRect.right < xPos || xPos > arena.right - 160.0f)
                 xAcc = -8.0f;  // Dann nach Links fliegen
 
             // Links vom Spieler oder zu nahe am linken Rand ?
-            if (pAim->xpos > xPos + GegnerRect[GegnerArt].right || xPos < TileEngine.ScrolltoX - 90)
+            if (pAim->xpos > xPos + GegnerRect[GegnerArt].right || xPos < arena.left - 90.0f)
                 xAcc = 8.0f;  // Dann nach Rechts fliegen
 
             // Speed nicht zu hoch werde lassen
@@ -164,7 +164,7 @@ void GegnerStahlfaust::DoKI() {
                 ySpeed = 0.0f;
 
                 // Screen Wackeln lassen
-                ShakeScreen(2.5);
+                ShakeAtCenter(2.5);
 
                 Handlung = GEGNER::CRUSHENERHOLEN;
             }
@@ -215,7 +215,7 @@ void GegnerStahlfaust::DoKI() {
                 ySpeed = 0.0f;
 
                 // Screen Wackeln lassen
-                ShakeScreen(5);
+                ShakeAtCenter(5);
 
                 Handlung = GEGNER::STEHEN;
 
@@ -305,9 +305,9 @@ void GegnerStahlfaust::GegnerExplode() {
                                     yPos + 40.0f + static_cast<float>(GetRandom(100)), SPIDERSPLITTER);
 
     for (int p = 0; p < NUMPLAYERS; p++)
-        DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_BIGRUMBLE);
+        Player[p].PlayFeedback(FFE_BIGRUMBLE);
 
-    ShakeScreen(4);
+    ShakeAtCenter(4);
 
     Player[0].Score += 5000;
 

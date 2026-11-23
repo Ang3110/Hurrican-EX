@@ -253,6 +253,9 @@ void GegnerTheWall::ReturnSkull() {
 // --------------------------------------------------------------------------------------
 
 void GegnerTheWall::DoKI() {
+    if (Handlung == GEGNER::INIT && TileEngine.Zustand == TileStateEnum::SCROLLBAR && !CoopArenaReady())
+        return;
+
     // Auf den Spieler schiessen?
     if (Energy < 1500.0f && Value1 == 1) {
         SkullShotDelay -= Timer.sync(1.0f);
@@ -406,7 +409,8 @@ void GegnerTheWall::DoKI() {
             Destroyable = false;
 
             // Level wieder zum Spieler scrollen und dann weiterscrollen lassen
-            TileEngine.ScrollLevel(Player[0].xpos - 300.0f, Player[0].ypos - 280.0f, TileStateEnum::SCROLLTOPLAYER);
+            const auto &focus = Player[0].Handlung == PlayerActionEnum::TOT ? *pAim : Player[0];
+            TileEngine.ScrollLevel(focus.xpos - 300.0f, focus.ypos - 280.0f, TileStateEnum::SCROLLTOPLAYER);
 
             // Rad checken
             for (int p = 0; p < NUMPLAYERS; p++) {
@@ -593,7 +597,7 @@ void GegnerTheWall::DoKI() {
 
             if (DoorOffset > PI) {
                 DoorOffset = 0.0f;
-                ShakeScreen(2.0f);
+                ShakeAtCenter(2.0f);
                 SoundManager.PlayWave(100, 128, 11000 + GetRandom(1500), SOUND::DOORSTOP);
 
                 // Tür öffnen Sound anhalten

@@ -63,6 +63,7 @@ void GegnerUfo::DoDraw() {
 // --------------------------------------------------------------------------------------
 
 void GegnerUfo::DoKI() {
+    const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
     SmokeDelay -= Timer.sync(1.0f);
 
     // Energie anzeigen
@@ -84,8 +85,7 @@ void GegnerUfo::DoKI() {
 
     // Levelausschnitt auf den Boss zentrieren, sobald dieser sichtbar wird
     if (Active == true && TileEngine.Zustand == TileStateEnum::SCROLLBAR) {
-        TileEngine.ScrollLevel(static_cast<float>(Value1), static_cast<float>(Value2),
-                               TileStateEnum::SCROLLTOLOCK);  // Level auf den Boss zentrieren
+        TileEngine.ScrollBossArena(static_cast<float>(Value1), static_cast<float>(Value2));  // Level auf den Boss zentrieren
         yPos -= 300;                                   // und Boss aus dem Screen setzen
         Handlung = GEGNER::INIT;
 
@@ -119,7 +119,7 @@ void GegnerUfo::DoKI() {
     // Über dem Spieler schweben
     //
     if (Handlung != GEGNER::INIT && Handlung != GEGNER::EINFLIEGEN && Handlung != GEGNER::EXPLODIEREN) {
-        if (xPos + 100 < Value1 + 320)
+        if (xPos + 100 < arena.center())
             xAcc = 3.0f;
         else
             xAcc = -3.0f;
@@ -150,7 +150,8 @@ void GegnerUfo::DoKI() {
             {
                 yPos = TileEngine.ScrolltoY + 100.0f;
                 Handlung = GEGNER::LAUFEN;
-                xSpeed = -35.0f;
+                // With constant acceleration the hover distance scales with speed squared.
+                xSpeed = -35.0f * std::sqrt((arena.right - arena.left) / RENDERWIDTH);
             }
         } break;
 
@@ -313,7 +314,7 @@ void GegnerUfo::DoKI() {
 
 void GegnerUfo::GegnerExplode() {
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
-    ShakeScreen(5.0f);
+    ShakeAtCenter(5.0f);
 
     // Splitter
     for (int i = 0; i < 20; i++)

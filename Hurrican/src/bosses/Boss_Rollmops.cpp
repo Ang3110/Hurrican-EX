@@ -258,16 +258,17 @@ void GegnerRollmops::RoundShot(bool single) {
 // --------------------------------------------------------------------------------------
 
 void GegnerRollmops::DoKI() {
+    const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
     // Energie anzeigen
     if (Handlung != GEGNER::INIT && Handlung != GEGNER::EXPLODIEREN)
         HUD.ShowBossHUD(4000, Energy);
 
     // Levelausschnitt auf den Mops zentrieren, sobald dieser sichtbar wird
     if (TileEngine.Zustand == TileStateEnum::SCROLLBAR) {
-        TileEngine.ScrollLevel(static_cast<float>(Value1), static_cast<float>(Value2), TileStateEnum::SCROLLTOLOCK);
+        TileEngine.ScrollBossArena(static_cast<float>(Value1), static_cast<float>(Value2));
 
         // Mops aus Screen bringen
-        xPos = Value1 + RENDERWIDTH;
+        xPos = arena.right;
         // yPos = Value2 + 100.0f;
         SoundManager.FadeSong(MUSIC::STAGEMUSIC, -2.0f, 0, true);  // Ausfaden und pausieren
     }
@@ -400,7 +401,7 @@ void GegnerRollmops::DoKI() {
                     xSpeed = -60.0f;
 
                 // Grenze überschritten, ab der abgebremst wird?
-                if (xPos + 65.0f < static_cast<float>(Value1 + 135))
+                if (xPos + 65.0f < arena.left + 135.0f)
                     xAcc = 19.0f;
 
                 // in der Mitte stoppen und abspringen
@@ -459,7 +460,7 @@ void GegnerRollmops::DoKI() {
                     xSpeed = 60.0f;
 
                 // Grenze überschritten, ab der abgebremst wird?
-                if (xPos + 65.0f > static_cast<float>(Value1 + 505))
+                if (xPos + 65.0f > arena.right - 135.0f)
                     xAcc = -19.0f;
 
                 // in der Mitte stoppen und abspringen
@@ -799,7 +800,7 @@ void GegnerRollmops::GegnerExplode() {
         PartikelSystem.PushPartikel(xPos - 20.0f + static_cast<float>(GetRandom(140)),
                                     yPos - 20.0f + static_cast<float>(GetRandom(140)), WATERFLUSH_HIGH);
 
-    ShakeScreen(5.0f);
+    ShakeAtCenter(5.0f);
 
     Player[0].Score += 5000;
 

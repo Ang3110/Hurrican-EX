@@ -113,7 +113,8 @@ void GegnerFlugBoss::DoDraw() {
                                   0xFFFFFFFF);
 
     // Auge
-    alphaAuge += Timer.sync(alphaSpeed * alphaDir);
+    if (AdvanceDrawEffects)
+        alphaAuge += Timer.sync(alphaSpeed * alphaDir);
 
     // Grenzen für Alpha checken
     if (alphaAuge > 255.0f) {

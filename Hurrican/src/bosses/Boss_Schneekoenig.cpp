@@ -60,9 +60,10 @@ void GegnerSchneeKoenig::DoDraw() {
     // int	Wert = 255-(static_cast<int>(DamageTaken));  // PICKLE not used
 
     if (Handlung == GEGNER::AUSFAHREN || WackelCount > 0.0f) {
-        xoff += Timer.sync(15.0f);
+        if (AdvanceDrawEffects)
+            xoff += Timer.sync(15.0f);
 
-        if (WackelCount > 0.0f)
+        if (AdvanceDrawEffects && WackelCount > 0.0f)
             WackelCount -= Timer.sync(1.0f);
     }
 
@@ -81,7 +82,8 @@ void GegnerSchneeKoenig::DoDraw() {
     // Body
     if (WackelAnim > 0.0f) {
         AnimPhase = 10 - DamageAnims[static_cast<int>(WackelAnim) % 4];
-        WackelAnim -= Timer.sync(2.0f);
+        if (AdvanceDrawEffects)
+            WackelAnim -= Timer.sync(2.0f);
 
         if (WackelAnim < 0.0f)
             AnimPhase = 10;
@@ -190,11 +192,11 @@ void GegnerSchneeKoenig::DoKI() {
         ySave = yPos;
 
         // kommt von oben in der mitte des screens runter
-        xPos = TileEngine.XOffset + (RENDERWIDTH - 140.0f) / 2.0f;
+        xPos = TileEngine.HorizontalPlayfieldAt(TileEngine.XOffset, true).center() - 70.0f;
         yPos = TileEngine.YOffset - 300.0f;
         ySpeed = 50.0f;
         DrawNow = true;
-        TileEngine.Zustand = TileStateEnum::LOCKED;
+        TileEngine.ScrollBossArena(TileEngine.XOffset, TileEngine.YOffset, TileStateEnum::LOCKED);
     }
 
     // Kanone zurückfahren
@@ -210,7 +212,7 @@ void GegnerSchneeKoenig::DoKI() {
             // auf den Boden geknallt?
             if (yPos > ySave) {
                 yPos = ySave;
-                ShakeScreen(3.0f);
+                ShakeAtCenter(3.0f);
                 Handlung = GEGNER::INIT2;
                 ySpeed = 0.0f;
                 AnimCount = 20.0f;
@@ -223,7 +225,7 @@ void GegnerSchneeKoenig::DoKI() {
                     PartikelSystem.PushPartikel(xPos + static_cast<float>(GetRandom(130) - 10),
                                                 yPos + static_cast<float>(GetRandom(40) + 60), SMOKEBIG);
 
-                TileEngine.ScrollLevel(TileEngine.XOffset, yPos - 320.0f, TileStateEnum::SCROLLTOLOCK);
+                TileEngine.ScrollBossArena(TileEngine.XOffset, yPos - 320.0f);
 
                 SoundManager.PlayWave(50, 128, 11025, SOUND::DOORSTOP);
             }
@@ -350,16 +352,17 @@ void GegnerSchneeKoenig::DoKI() {
 
                                 // an den Rand springen?
                                 else {
+                                    const auto arena = TileEngine.HorizontalPlayfieldAt(TileEngine.XOffset, true);
                                     float target;
 
-                                    if (xPos + 100 > TileEngine.XOffset + 320.0f)
-                                        target = TileEngine.XOffset + 100.0f;
+                                    if (xPos + 100 > arena.center())
+                                        target = arena.left + 100.0f;
                                     else
-                                        target = TileEngine.XOffset + 540.0f;
+                                        target = arena.right - 100.0f;
 
                                     // zurück zur Mitte springen
                                     if (ShotCount == 1)
-                                        target = static_cast<float>(TileEngine.XOffset) + 320.0f;
+                                        target = arena.center();
 
                                     Action = GEGNER::AUSSPUCKEN;
                                     ySpeed = -110.0f;
@@ -420,7 +423,7 @@ void GegnerSchneeKoenig::DoKI() {
                                                                 SNOWFLUSH);
 
                                 yPos = ySave - 40.0f;
-                                ShakeScreen(3.0f);
+                                ShakeAtCenter(3.0f);
 
                                 xSpeed = 0.0f;
                                 ySpeed = 0.0f;
@@ -469,7 +472,7 @@ void GegnerSchneeKoenig::DoKI() {
                 // Auf der Hälfte explodieren lassen?
                 if (Value1 >= 2 && yPos < TileEngine.YOffset + 150.0f) {
                     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
-                    ShakeScreen(5.0f);
+                    ShakeAtCenter(5.0f);
 
                     for (int i = 0; i < 50; i++)
                         PartikelSystem.PushPartikel(xPos + static_cast<float>(GetRandom(150) - 20),

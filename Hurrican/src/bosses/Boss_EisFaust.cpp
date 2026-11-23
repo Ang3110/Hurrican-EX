@@ -30,15 +30,14 @@ GegnerEisFaust::GegnerEisFaust(int Wert1, int Wert2, bool Light) {
 // --------------------------------------------------------------------------------------
 
 void GegnerEisFaust::DoKI() {
+    const auto arena = TileEngine.HorizontalPlayfieldAt(static_cast<float>(Value1), true);
     // Energie anzeigen
     if (Handlung != GEGNER::NOTVISIBLE && Handlung != GEGNER::EXPLODIEREN)
         HUD.ShowBossHUD(7000, Energy);
 
     // Levelausschnitt auf die Faust zentrieren, sobald dieses sichtbar wird
     if (Active == true && TileEngine.Zustand == TileStateEnum::SCROLLBAR) {
-        TileEngine.ScrollLevel(static_cast<float>(Value1),
-                               static_cast<float>(Value2),
-                               TileStateEnum::SCROLLTOLOCK);  // Level auf die Faust zentrieren
+        TileEngine.ScrollBossArena(static_cast<float>(Value1), static_cast<float>(Value2));  // Level auf die Faust zentrieren
         yPos -= 300;                                   // und Faust aus dem Screen setzen
 
         SoundManager.FadeSong(MUSIC::STAGEMUSIC, -2.0f, 0, true);  // Ausfaden und pausieren
@@ -111,11 +110,11 @@ void GegnerEisFaust::DoKI() {
             AnimCount -= Timer.getSpeedFactor();
 
             // Rechts vom Spieler oder zu nahe am rechten Rand ?
-            if (pAim->xpos + pAim->CollideRect.right < xPos || xPos > TileEngine.ScrolltoX + 480)
+            if (pAim->xpos + pAim->CollideRect.right < xPos || xPos > arena.right - 160.0f)
                 xAcc = -8.0f;  // Dann nach Links fliegen
 
             // Links vom Spieler oder zu nahe am linken Rand ?
-            if (pAim->xpos > xPos + GegnerRect[GegnerArt].right || xPos < TileEngine.ScrolltoX - 90)
+            if (pAim->xpos > xPos + GegnerRect[GegnerArt].right || xPos < arena.left - 90.0f)
                 xAcc = 8.0f;  // Dann nach Rechts fliegen
 
             // Speed nicht zu hoch werde lassen
@@ -165,7 +164,7 @@ void GegnerEisFaust::DoKI() {
                 ySpeed = 0.0f;
 
                 // Screen Wackeln lassen
-                ShakeScreen(2.5);
+                ShakeAtCenter(2.5);
 
                 Handlung = GEGNER::CRUSHENERHOLEN;
             }
@@ -196,7 +195,7 @@ void GegnerEisFaust::DoKI() {
                 } else {
                     Handlung = GEGNER::BOMBARDIEREN;
 
-                    xPos = static_cast<float>(Value1) - 250.0f;
+                    xPos = arena.left - 250.0f;
                     yPos = static_cast<float>(Value2) - 200.0f;
                     yAcc = 0;
                     ySpeed = 10.0f;
@@ -219,18 +218,18 @@ void GegnerEisFaust::DoKI() {
             while (AnimCount <= 0.0f) {
                 AnimCount += 4.0f;
 
-                if (xPos + 100.0f > TileEngine.XOffset && xPos + 100.0f < TileEngine.XOffset + 620.0f &&
-                    yPos + 220.0f > TileEngine.XOffset && yPos + 220.0f < TileEngine.XOffset + 440.0f)
+                if (xPos + 100.0f > arena.left && xPos + 100.0f < arena.right - 20.0f &&
+                    yPos + 220.0f > TileEngine.YOffset && yPos + 220.0f < TileEngine.YOffset + 440.0f)
                     Gegner.PushGegner(xPos + 100.0f, yPos + 220.0f, EISZAPFEN, 1, 0, false);
             }
 
-            if (xSpeed > 0.0f && xPos > static_cast<float>(Value1 + RENDERWIDTH) + 30.0f) {
+            if (xSpeed > 0.0f && xPos > arena.right + 30.0f) {
                 xSpeed = -20.0f;
                 ySpeed = 10.0f;
                 yPos = static_cast<float>(Value2) - 100.0f;
             }
 
-            if (xSpeed < 0.0f && xPos < static_cast<float>(Value1) - 300.0f) {
+            if (xSpeed < 0.0f && xPos < arena.left - 300.0f) {
                 xSpeed = 0.0f;
                 AnimCount = 50.0f;
 
@@ -241,7 +240,7 @@ void GegnerEisFaust::DoKI() {
                 ySpeed = 0.0f;
                 yAcc = 0.0f;
                 yPos = TileEngine.ScrolltoY - 400.0f;
-                xPos = static_cast<float>(Value1) + 200.0f;
+                xPos = arena.center() - 120.0f;
             }
 
         } break;
@@ -265,7 +264,7 @@ void GegnerEisFaust::DoKI() {
                 ySpeed = 0.0f;
 
                 // Screen Wackeln lassen
-                ShakeScreen(5);
+                ShakeAtCenter(5);
 
                 Handlung = GEGNER::STEHEN;
             }

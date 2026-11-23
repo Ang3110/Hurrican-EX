@@ -23,16 +23,33 @@
  */
 
 #include "SDL_fmod.hpp"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #if defined(USE_OPENMPT)
-#  include <cmath>
+#  include <atomic>
+#  include <libopenmpt/libopenmpt.h>
 #endif
 
+constexpr int MusicVolumeMax = 255;
+
+struct MUSIC_MODULE {
+#if defined(USE_OPENMPT)
+    openmpt_module *decoder;
+    std::atomic<int> volume{MusicVolumeMax};
+    std::atomic<bool> paused{false};
+    std::atomic<bool> finished{false};
+#else
+    Mix_Music *decoder;
+    int volume = MusicVolumeMax;
+#endif
+    bool looped = true;
+};
+
 static int g_allocated = 0;
-static bool g_music_loops = true;
 #if defined(USE_OPENMPT)
 static int g_mixrate = 0;
+static void hookmusic(void *ptr, uint8_t *buffer, int size);
 #endif
 
 static MUSIC_MODULE *g_music_current = nullptr;
@@ -44,7 +61,6 @@ static MUSIC_MODULE *g_music_current = nullptr;
           (void)error;
           return OPENMPT_ERROR_FUNC_RESULT_DEFAULT & ~OPENMPT_ERROR_FUNC_RESULT_LOG;
         }
-    double getDeciBel(int volume) { return 20*log10(volume/100.); }
 #endif
 
 signed char SOUND_Init(int mixrate, int maxsoftwarechannels, unsigned int flags) {
@@ -120,7 +136,6 @@ signed char SOUND_SetPan(int channel, int pan) {
 }
 
 MUSIC_MODULE *MUSIC_LoadSong(const char *filename) {
-    MUSIC_MODULE *music = nullptr;
 #if defined(USE_OPENMPT)
     std::vector<char> buffer = LoadFileToMemory(filename);
 
@@ -129,12 +144,13 @@ MUSIC_MODULE *MUSIC_LoadSong(const char *filename) {
         return nullptr;
     }
 
-    music = openmpt_module_create_from_memory2(buffer.data(), size_t(buffer.size() - 1), &log_func, NULL, &error_func, NULL, NULL, NULL, NULL);
+    auto *decoder = openmpt_module_create_from_memory2(buffer.data(), buffer.size() - 1, &log_func, nullptr,
+                                                       &error_func, nullptr, nullptr, nullptr, nullptr);
 #else
-    music = Mix_LoadMUS(filename);
+    auto *decoder = Mix_LoadMUS(filename);
 #endif
 
-    return music;
+    return decoder ? new MUSIC_MODULE{decoder} : nullptr;
 }
 
 MUSIC_MODULE *MUSIC_LoadSongEx(const char *filename,
@@ -148,45 +164,52 @@ MUSIC_MODULE *MUSIC_LoadSongEx(const char *filename,
 
 // DKS - Added default parameter to specify if a song should loop ('gameover.it' and 'stageclear.it' songs shouldn't):
 // signed char MUSIC_PlaySong( MUSIC_MODULE* music )
-signed char MUSIC_PlaySong(MUSIC_MODULE *music, bool loop /*=true*/) {
-// printf( "%8X MUSIC_PlaySong\n", music );
-#if defined(USE_OPENMPT)
-    openmpt_module_set_render_param(music, OPENMPT_MODULE_RENDER_MASTERGAIN_MILLIBEL, getDeciBel(DEFAULT_VOLUME)/100.);
-    openmpt_module_set_position_seconds(music, 0.);
-    Mix_HookMusic(&hookmusic, music);
-#else
-    Mix_HookMusicFinished(hookmusicFinished);
-    Mix_PlayMusic(music, (loop ? -1 : 0));
-#endif
-    g_music_loops = loop;
+signed char MUSIC_PlaySong(MUSIC_MODULE *music, bool loop) {
+    MUSIC_StopAllSongs();
+    music->looped = loop;
     g_music_current = music;
-
+#if defined(USE_OPENMPT)
+    openmpt_module_set_position_seconds(music->decoder, 0.0);
+    music->paused = false;
+    music->finished = false;
+    Mix_HookMusic(hookmusic, music);
+#else
+    Mix_VolumeMusic(music->volume * MIX_MAX_VOLUME / MusicVolumeMax);
+    if (Mix_PlayMusic(music->decoder, loop ? -1 : 0) < 0)
+        g_music_current = nullptr;
+#endif
     return 0;
 }
 
 signed char MUSIC_IsPlaying(MUSIC_MODULE *music) {
-    // printf( "%8X MUSIC_IsPlaying\n", music );
-    return g_music_current == music ? 1 : 0;
+    if (!music || g_music_current != music)
+        return 0;
+#if defined(USE_OPENMPT)
+    return !music->finished;
+#else
+    return Mix_PlayingMusic() != 0;
+#endif
 }
 
 signed char MUSIC_FreeSong(MUSIC_MODULE *music) {
-// printf( "%8X MUSIC_FreeSong\n", music );
+    if (!music)
+        return 0;
+    MUSIC_StopSong(music);
 #if defined(USE_OPENMPT)
-    openmpt_module_destroy(music);
+    openmpt_module_destroy(music->decoder);
 #else
-    Mix_FreeMusic(music);
+    Mix_FreeMusic(music->decoder);
 #endif
-
+    delete music;
     return 0;
 }
 
 signed char MUSIC_StopSong(MUSIC_MODULE *music) {
     // printf( "%8X MUSIC_StopSong\n", music );
-    if (g_music_current == music) {
+    if (music && g_music_current == music) {
 #if defined(USE_OPENMPT)
         Mix_HookMusic(nullptr, nullptr);
 #else
-        Mix_HookMusicFinished(nullptr);
         Mix_HaltMusic();
 #endif
         g_music_current = nullptr;
@@ -195,47 +218,47 @@ signed char MUSIC_StopSong(MUSIC_MODULE *music) {
 }
 
 signed char MUSIC_SetPaused(MUSIC_MODULE *music, signed char pause) {
-    // printf( "%8X MUSIC_SetPaused %d\n", music, pause );
+    if (!music)
+        return 0;
+#if defined(USE_OPENMPT)
+    if (g_music_current == music) {
+        music->paused = pause != 0;
+    } else if (!pause) {
+        music->paused = false;
+        g_music_current = music;
+        Mix_HookMusic(hookmusic, music);
+    }
+#else
     if (g_music_current == music) {
         if (pause)
             Mix_PauseMusic();
         else
             Mix_ResumeMusic();
     } else if (!pause) {
-#if defined(USE_OPENMPT)
-        // DKS - When using modplug, we can handle pausing and unpausing various songs:
-        g_music_current = music;
-        Mix_HookMusic(&hookmusic, music);  // DKS - Be sure to reload our hook in case StopSong() was called
-        Mix_ResumeMusic();
-#else
         // DKS - Whereas with SDL_mixer, it can only handle one song at a time so if another
         //      gets played after a song was paused, we have to start the paused song over again:
-        MUSIC_PlaySong(music);
-#endif
+        MUSIC_PlaySong(music, music->looped);
     }
+#endif
     return 0;
 }
 
 signed char MUSIC_GetPaused(MUSIC_MODULE *music) {
-    // printf( "%8X MUSIC_GetPaused\n", music );
-    if (g_music_current == music) {
-        return Mix_PausedMusic();
-    }
-    return 0;
+#if defined(USE_OPENMPT)
+    return music && music->paused;
+#else
+    return music && g_music_current == music && Mix_PausedMusic();
+#endif
 }
 
 signed char MUSIC_SetMasterVolume(MUSIC_MODULE *music, int volume) {
-// printf( "%8X MUSIC_SetMasterVolume %d\n", music, volume );
-#if defined(USE_OPENMPT)
-    // DKS - Modplug supports setting volume for individual tracks
-    if (music) {
-        openmpt_module_set_render_param(music, OPENMPT_MODULE_RENDER_MASTERGAIN_MILLIBEL, getDeciBel(volume)/100.);
-        // DKS - no need for this:
-        // g_volume = volume;
-    }
-#else
+    if (!music)
+        return 0;
+    const int gain = std::clamp(volume, 0, MusicVolumeMax);
+    music->volume = gain;
+#if !defined(USE_OPENMPT)
     if (g_music_current == music)
-        Mix_VolumeMusic(volume / 2);
+        Mix_VolumeMusic(gain * MIX_MAX_VOLUME / MusicVolumeMax);
 #endif
     return 0;
 }
@@ -246,56 +269,39 @@ void MUSIC_StopAllSongs() {
 }
 
 signed char MUSIC_IsFinished(MUSIC_MODULE *music) {
-    // printf( "%8X MUSIC_IsFinished\n", music );
-    if (g_music_current == music) {
-        return 1;
-    } else {
-        return Mix_PlayingMusic();
-    }
+    return !MUSIC_IsPlaying(music);
 }
 
 #if defined(USE_OPENMPT)
-void hookmusic(void *ptr, uint8_t *buffer, int size) {
-    const int frames = size / 4;
-    int rsize;
-    MUSIC_MODULE *music = reinterpret_cast<MUSIC_MODULE *>(ptr);
-
-    rsize = static_cast<int>(openmpt_module_read_interleaved_stereo(music, g_mixrate, frames, reinterpret_cast<int16_t *>(buffer)));
-
-    // DKS - Added support for non-looped music files (i.e. gameover.it shouldn't loop)
-    //      NOTE: I don't see the reason for the volume check, setting the volume to 0
-    //            should be checked elsewhere, and music should be disabled entirely.
-    // if (g_volume > 0 || (rsize < size))
-    //{
-    //    if (rsize < size)
-    //    {
-    //        ModPlug_Seek( music, 0 );
-    //    }
-    //}
-    if (rsize < frames) {
-        if (g_music_loops) {
-            // The song is over and it loops, so re-seek to beginning and fill rest of buffer
-            openmpt_module_set_position_seconds(music, 0.);
-            openmpt_module_read_interleaved_stereo(music, g_mixrate, frames - rsize, reinterpret_cast<int16_t *>(buffer + rsize*4));
-
-        } else {
-            // The song is over and doesn't loop, so fill remaining part of the buffer with zeroes and stop it
-            std::memset(buffer + rsize*4, 0, size - rsize*4);
-            MUSIC_StopSong(music);
-        }
+static void hookmusic(void *ptr, uint8_t *buffer, int size) {
+    auto *music = static_cast<MUSIC_MODULE *>(ptr);
+    if (music->paused || music->finished) {
+        std::memset(buffer, 0, size);
+        return;
     }
-}
-#else
-void hookmusicFinished() {
 
-    if (g_music_loops) {
-        // The song is over and it loops, so re-seek to beginning
-        Mix_RewindMusic();
-    } else {
-        // The song is over and doesn't loop, so stop it
-        Mix_HaltMusic();
-        g_music_current = nullptr;
+    constexpr int channels = 2;
+    auto *samples = reinterpret_cast<int16_t *>(buffer);
+    const size_t frames = size / (channels * sizeof(*samples));
+    size_t written = openmpt_module_read_interleaved_stereo(music->decoder, g_mixrate, frames, samples);
+    if (written < frames && music->looped) {
+        openmpt_module_set_position_seconds(music->decoder, 0.0);
+        written += openmpt_module_read_interleaved_stereo(music->decoder, g_mixrate, frames - written,
+                                                         samples + written * channels);
+    } else if (written < frames) {
+        music->finished = true;
     }
+
+    // The custom music callback bypasses SDL_mixer's music volume. Scale only the decoded track.
+    const int gain = music->volume.load(std::memory_order_relaxed);
+    if (gain == 0) {
+        written = 0;
+    } else if (gain < MusicVolumeMax) {
+        for (size_t i = 0; i < written * channels; ++i)
+            samples[i] = static_cast<int16_t>(samples[i] * gain / MusicVolumeMax);
+    }
+    const size_t bytes = written * channels * sizeof(*samples);
+    std::memset(buffer + bytes, 0, size - bytes);
 }
 #endif
 

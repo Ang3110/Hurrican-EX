@@ -27,6 +27,7 @@ GegnerPharaoKopf::GegnerPharaoKopf(int Wert1, int Wert2, bool Light) {
 }
 
 bool GegnerPharaoKopf::Links() {
+    // The head fills the stone chamber above the player's side passage.
     int const limit = Value1 + BORDER;
     if (static_cast<int>(xPos) < limit) {
         xPos = static_cast<float>(limit);
@@ -72,8 +73,7 @@ void GegnerPharaoKopf::DoKI() {
 
     // Levelausschnitt auf den PharaoKopf zentrieren, sobald dieser sichtbar wird
     if (Active == true && TileEngine.Zustand == TileStateEnum::SCROLLBAR) {
-        TileEngine.ScrollLevel(static_cast<float>(Value1), static_cast<float>(Value2),
-                               TileStateEnum::SCROLLTOLOCK);  // Level auf die Faust zentrieren
+        TileEngine.ScrollBossArena(static_cast<float>(Value1), static_cast<float>(Value2));  // Level auf die Faust zentrieren
 
         SoundManager.FadeSong(MUSIC::STAGEMUSIC, -2.0f, 0, true);  // Ausfaden und pausieren
     }
@@ -247,7 +247,7 @@ void GegnerPharaoKopf::DoKI() {
                     xAcc = 0.0f;
 
                     for (int p = 0; p < NUMPLAYERS; p++)
-                        DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_MEDIUMRUMBLE);
+                        Player[p].PlayFeedback(FFE_MEDIUMRUMBLE);
 
                     for (int i = 0; i < 20; i++) {
                         PartikelSystem.PushPartikel(xPos - 10.0f,
@@ -266,7 +266,7 @@ void GegnerPharaoKopf::DoKI() {
                     TestDamagePlayers(1000.0f);
 
                     // Screen Wackeln lassen
-                    ShakeScreen(3);
+                    ShakeAtCenter(3);
                 }
             }
 
@@ -282,7 +282,7 @@ void GegnerPharaoKopf::DoKI() {
                 // an die Wand gekommen?
                 if (Rechts()) {
                     for (int p = 0; p < NUMPLAYERS; p++)
-                        DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_MEDIUMRUMBLE);
+                        Player[p].PlayFeedback(FFE_MEDIUMRUMBLE);
 
                     xSpeed = 0.0f;
                     xAcc = 0.0f;
@@ -303,7 +303,7 @@ void GegnerPharaoKopf::DoKI() {
                     TestDamagePlayers(1000.0f);
 
                     // Screen Wackeln lassen
-                    ShakeScreen(3);
+                    ShakeAtCenter(3);
                 }
             }
 
@@ -332,7 +332,7 @@ void GegnerPharaoKopf::DoKI() {
                     }
 
                     // Screen Wackeln lassen
-                    ShakeScreen(3);
+                    ShakeAtCenter(3);
                 }
             } else
 
@@ -368,7 +368,7 @@ void GegnerPharaoKopf::DoKI() {
                     Handlung = GEGNER::CRUSHENERHOLEN;
                 }
                 // Screen Wackeln lassen
-                ShakeScreen(3);
+                ShakeAtCenter(3);
             }
         } break;
 
@@ -513,7 +513,7 @@ void GegnerPharaoKopf::GegnerExplode() {
         if (Player[p].AufPlattform == this)
             Player[p].AufPlattform = nullptr;
 
-        DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_BIGRUMBLE);
+        Player[p].PlayFeedback(FFE_BIGRUMBLE);
     }
 
     // Splitter
@@ -531,7 +531,7 @@ void GegnerPharaoKopf::GegnerExplode() {
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
     SoundManager.PlayWave(100, 128, 11025, SOUND::PHARAORAMM);
 
-    ShakeScreen(4);
+    ShakeAtCenter(4);
 
     HUD.deactivateBossHUD();
 

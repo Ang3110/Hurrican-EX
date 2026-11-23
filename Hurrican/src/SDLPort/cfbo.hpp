@@ -32,8 +32,9 @@ class CFbo {
   public:
     CFbo();
 
-    bool Open(uint16_t w, uint16_t h);
-    void BindTexture(bool active);
+    bool Open(int w, int h, bool fullColor = false);
+    bool EnsureStencil(int width, int height);
+    void BindTexture(bool active, bool filtering = true);
     void Close();
 
     bool IsEnabled() const { return Enabled; }
@@ -44,10 +45,9 @@ class CFbo {
     bool Enabled;
     GLuint texture;
     GLuint framebuffer;
-    uint16_t width;
-    uint16_t height;
-
-  private:
+    GLuint stencil = 0;
+    bool stencilAttempted = false;
+    bool textureFiltering = true;
 };
 
 #endif

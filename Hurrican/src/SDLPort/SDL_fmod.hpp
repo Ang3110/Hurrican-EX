@@ -27,19 +27,10 @@
 
 #include "SDL_mixer.h"
 #include "SDL_port.hpp"
-#if defined(USE_OPENMPT)
-#include <libopenmpt/libopenmpt.h>
-#endif
 #include "Logdatei.hpp"
 
 #define SOUND_SAMPLE Mix_Chunk
-#if defined(USE_OPENMPT)
-#define MUSIC_MODULE openmpt_module
-#else
-#define MUSIC_MODULE Mix_Music
-#endif
-
-#define DEFAULT_VOLUME 100
+struct MUSIC_MODULE;
 
 #ifdef __cplusplus
 extern "C" {
@@ -92,12 +83,6 @@ signed char SOUND_StopSound(int channel);
 // DKS - Added:
 signed char SOUND_SetPaused(int channel, signed char paused);
 signed char SOUND_GetPaused(int channel);
-
-#if defined(USE_OPENMPT)
-void hookmusic(void *ptr, uint8_t *buffer, int size);
-#else
-void hookmusicFinished();
-#endif
 
 #ifdef __cplusplus
 }

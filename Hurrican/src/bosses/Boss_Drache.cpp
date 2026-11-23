@@ -261,7 +261,8 @@ void GegnerDrache::DoDraw() {
 
     // Pfeile anzeigen
     if (Handlung == GEGNER::WARTEN) {
-        ArrowCount -= Timer.sync(0.2f);
+        if (AdvanceDrawEffects)
+            ArrowCount -= Timer.sync(0.2f);
         if (ArrowCount < 0.0f)
             ArrowCount = 2.0f;
 
@@ -627,7 +628,7 @@ void GegnerDrache::DoKI() {
                             PartikelSystem.PushPartikel(xPos - 120.0f + static_cast<float>(GetRandom(300)),
                                                         yPos + 80.0f, SMOKEBIG);
 
-                        ShakeScreen(5.0f);
+                        ShakeAtCenter(5.0f);
                         SoundManager.PlayWave(100, 128, 10000, SOUND::DOORSTOP);
 
                         xSpeed = 0.0f;

@@ -125,7 +125,7 @@ void GegnerSkull::DoKI() {
                 SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
                 SoundManager.PlayWave(100, 128, 9000, SOUND::EXPLOSION3);
                 SoundManager.PlayWave(100, 128, 7000, SOUND::EXPLOSION1);
-                ShakeScreen(10.0f);
+                ShakeAtCenter(10.0f);
                 Energy = 0.0f;
                 SoundManager.PlayWave(100, 128, 7000, SOUND::MUTANT);
 

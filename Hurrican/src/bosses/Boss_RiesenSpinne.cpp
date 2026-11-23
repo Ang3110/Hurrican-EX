@@ -83,10 +83,7 @@ void GegnerRiesenSpinne::DrawLeg(float x, float y, float winkel, int anim, int o
     float u = y + 30.0f + 0.5f + yoff + tempdamage + yBody;                                       // unten
 
     // Textur Koordinaten
-    float tl = Legs[2].itsRect.left * Legs[2].itsXTexScale;    // Links
-    float tr = Legs[2].itsRect.right * Legs[2].itsXTexScale;   // Rechts
-    float to = Legs[2].itsRect.top * Legs[2].itsYTexScale;     // Oben
-    float tu = Legs[2].itsRect.bottom * Legs[2].itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = Legs[2].FrameUV(Legs[2].itsRect);
 
     VERTEX2D TriangleStrip[4];  // Strip für einen Schuss
 
@@ -160,10 +157,11 @@ void GegnerRiesenSpinne::DrawLeg(float x, float y, float winkel, int anim, int o
     o = y + 20.0f - 0.5f - (Legs[1].itsRect.bottom - Legs[1].itsRect.top) + yoff2 + yBody;  // Oben
     u = yp + +20.0f + 0.5f;                                                                 // unten
 
-    tl = Legs[1].itsRect.left * Legs[1].itsXTexScale;    // Links
-    tr = Legs[1].itsRect.right * Legs[1].itsXTexScale;   // Rechts
-    to = Legs[1].itsRect.top * Legs[1].itsYTexScale;     // Oben
-    tu = Legs[1].itsRect.bottom * Legs[1].itsYTexScale;  // Unten
+    const auto leg = Legs[1].FrameUV(Legs[1].itsRect);
+    tl = leg.left;
+    tr = leg.right;
+    to = leg.top;
+    tu = leg.bottom;
 
     TriangleStrip[0].color = TriangleStrip[1].color = TriangleStrip[2].color = TriangleStrip[3].color = col;
 
@@ -788,7 +786,7 @@ void GegnerRiesenSpinne::DoKI() {
 void GegnerRiesenSpinne::GegnerExplode() {
     Player[0].Score += 15000;
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
-    ShakeScreen(5.0f);
+    ShakeAtCenter(5.0f);
 
     ScrolltoPlayeAfterBoss();
 }

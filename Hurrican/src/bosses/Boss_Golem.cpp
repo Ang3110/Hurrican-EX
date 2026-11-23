@@ -81,7 +81,7 @@ void GegnerGolem::Wackeln() {
 
         if (Handlung == GEGNER::EINFLIEGEN || Handlung == GEGNER::LAUFEN || Handlung == GEGNER::LAUFEN2 ||
             Handlung == GEGNER::LAUFEN3 || Handlung == GEGNER::LAUFEN4) {
-            ShakeScreen(4.0f);
+            ShakeAtCenter(4.0f);
             SoundManager.PlayWave(100, 128, 15000 + GetRandom(2000), SOUND::DOORSTOP);
         }
     }
@@ -390,7 +390,7 @@ void GegnerGolem::DoKI() {
 
                     if (rotarm2 > 1.0f) {
                         state2 = ArmState::HEBEN;
-                        ShakeScreen(3.0f);
+                        ShakeAtCenter(3.0f);
                         SoundManager.PlayWave(75, 128, 15000 + GetRandom(2000), SOUND::DOORSTOP);
 
                         Gegner.PushGegner(TileEngine.XOffset + 100.0f + static_cast<float>(GetRandom(540)),
@@ -410,7 +410,7 @@ void GegnerGolem::DoKI() {
 
                     if (rotarm1 > 1.0f) {
                         state2 = ArmState::SENKEN;
-                        ShakeScreen(3.0f);
+                        ShakeAtCenter(3.0f);
                         SoundManager.PlayWave(75, 128, 15000 + GetRandom(2000), SOUND::DOORSTOP);
 
                         Gegner.PushGegner(pAim->xpos - 20.0f + static_cast<float>(GetRandom(70)),
@@ -748,7 +748,7 @@ void GegnerGolem::GegnerExplode() {
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
 
     for (int p = 0; p < NUMPLAYERS; p++)
-        DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_BIGRUMBLE);
+        Player[p].PlayFeedback(FFE_BIGRUMBLE);
 
     int i;
 
@@ -768,7 +768,7 @@ void GegnerGolem::GegnerExplode() {
         PartikelSystem.PushPartikel(xPos - 50.0f + static_cast<float>(GetRandom(200)),
                                     yPos + yoff + static_cast<float>(GetRandom(300)), EXPLOSION_BIG);
 
-    ShakeScreen(4);
+    ShakeAtCenter(4);
 
     Player[0].Score += 8000;
 

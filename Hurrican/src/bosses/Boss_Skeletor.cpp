@@ -346,7 +346,7 @@ void GegnerSkeletor::DoKI() {
                     PartikelSystem.PushPartikel(xPos + static_cast<float>(GetRandom(100)),
                                                 yPos + static_cast<float>(GetRandom(10) + 180), SPIDERSPLITTER);
 
-                ShakeScreen(5.0f);
+                ShakeAtCenter(5.0f);
                 SoundManager.PlayWave(100, 128, 11025, SOUND::DOORSTOP);
             }
         } break;
@@ -482,7 +482,7 @@ void GegnerSkeletor::DoKI() {
                     PartikelSystem.PushPartikel(xPos + static_cast<float>(GetRandom(100)),
                                                 yPos + static_cast<float>(GetRandom(10) + 180), SPIDERSPLITTER);
 
-                ShakeScreen(5.0f);
+                ShakeAtCenter(5.0f);
                 SoundManager.PlayWave(100, 128, 11025, SOUND::DOORSTOP);
             }
         } break;
@@ -530,7 +530,7 @@ void GegnerSkeletor::DoKI() {
         PartikelSystem.PushPartikel(xPos + 62.0f, yPos + 100.0f, SHOCKEXPLOSION);
         SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
         Player[0].Score += 12500;
-        ShakeScreen(5.0f);
+        ShakeAtCenter(5.0f);
 
         // Endboss-Musik ausfaden und abschalten
         SoundManager.FadeSong(MUSIC::BOSS, -2.0f, 0, false);

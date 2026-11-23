@@ -26,6 +26,7 @@
 #define _TEXTURE_H_
 
 #include <string>
+#include "DX8Graphics.hpp"
 #include "DX8Texture.hpp"
 #include "SDL_port.hpp"
 
@@ -60,7 +61,9 @@ bool SDL_LoadTexture(const std::string &path,
                      const std::string &filename,
                      void *buf,
                      unsigned int buf_size,
-                     TextureHandle &th);
+                     TextureHandle &th,
+                     TextureLayout layout = TextureLayout::Sprite,
+                     SDL_Point glyphSize = {});
 void SDL_UnloadTexture(TextureHandle &th);
 
 bool load_texture(image_t &image, GLuint &new_texture);
@@ -72,7 +75,7 @@ bool loadImageETC1(image_t &image, const std::string &fullpath);
 bool loadImagePVRTC(image_t &image, const std::string &fullpath);
 #endif
 
-bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsigned int buf_size);
+bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsigned int buf_size, bool nativeSize = false);
 
 std::vector<char> LowerResolution(SDL_Surface *surface, int factor);
 

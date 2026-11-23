@@ -99,7 +99,7 @@ void GegnerEvilHurri::DoKI() {
 
     // Hat der Boss keine Energie mehr ? Dann fliegt er in die Luft
     if (Energy <= 100.0f && Handlung != GEGNER::EXPLODIEREN) {
-        ShakeScreen(5);
+        ShakeAtCenter(5);
 
         AnimPhase = 40;
         AnimEnde = 0;

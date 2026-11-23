@@ -102,7 +102,8 @@ void GegnerFahrstuhlBoss::DoKI() {
 
         // Level wieder auf Spieler zentrieren
         //
-        TileEngine.ScrollLevel(Player[0].xpos - 300, Player[0].ypos - 280, TileStateEnum::SCROLLTOPLAYER, 10.0f, 50.0f);
+        const auto &focus = Player[0].Handlung == PlayerActionEnum::TOT ? *pAim : Player[0];
+        TileEngine.ScrollLevel(focus.xpos - 300, focus.ypos - 280, TileStateEnum::SCROLLTOPLAYER, 10.0f, 50.0f);
 
         // Endboss-Musik ausfaden und abschalten
         SoundManager.FadeSong(MUSIC::BOSS, -2.0f, 0, false);
@@ -329,7 +330,7 @@ void GegnerFahrstuhlBoss::DoKI() {
         {
             // An der Seite angekommen ? Dann ruckeln lassen und Steine werfen
             if ((x1 > 280 && dx1 > 0.0f) || (x1 < 0 && dx1 < 0.0f)) {
-                ShakeScreen(3);
+                ShakeAtCenter(3);
                 dx1 *= -1.0f;
 
                 Gegner.PushGegner(xPos + 10.0f + static_cast<float>(GetRandom(360)),
@@ -564,7 +565,7 @@ void GegnerFahrstuhlBoss::DoKI() {
 // --------------------------------------------------------------------------------------
 
 void GegnerFahrstuhlBoss::GegnerExplode() {
-    ShakeScreen(10);
+    ShakeAtCenter(10);
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
     Player[0].Score += 9000;
 

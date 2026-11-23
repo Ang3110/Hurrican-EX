@@ -54,17 +54,151 @@ enum { PVRTC_RGB_2BPP = 0, PVRTC_RGBA_2BPP, PVRTC_RGB_4BPP, PVRTC_RGBA_4BPP };
 //      In th.npot_scalex and th.npot_scaley, it sets a correction
 //      factor to apply to each dimension to compensate for any increases in size
 //      from power-of-two expansion (each will remain 1.0 if none occurred).
+static bool PadFontAtlas(image_t &image, SDL_Point glyphSize, bool whiteMask) {
+    const int sourceWidth = static_cast<int>(std::lround(image.w * image.npot_scalex));
+    const int sourceHeight = static_cast<int>(std::lround(image.h * image.npot_scaley));
+    if (sourceWidth % glyphSize.x != 0 || sourceHeight % glyphSize.y != 0)
+        return false;
+
+    const int columns = sourceWidth / glyphSize.x;
+    const int rows = sourceHeight / glyphSize.y;
+    const int strideX = FontAtlasStride(glyphSize.x);
+    const int strideY = FontAtlasStride(glyphSize.y);
+    const uint32_t width = nextPowerOfTwo(columns * strideX);
+    const uint32_t height = nextPowerOfTwo(rows * strideY);
+    constexpr size_t pixelSize = 4;
+    std::vector<char> pixels(static_cast<size_t>(width) * height * pixelSize);
+
+    // The menu font uses a white mask tinted by the renderer. Other font sheets
+    // retain their authored RGB shading, including the dark pixels in small text.
+    if (whiteMask)
+        for (size_t i = 0; i < pixels.size(); i += pixelSize)
+            std::memset(pixels.data() + i, 0xff, 3);
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < columns; ++col) {
+            for (int y = 0; y < glyphSize.y; ++y) {
+                const size_t sourceY = row * glyphSize.y + y;
+                const char *source = image.data.data() + (sourceY * image.w + col * glyphSize.x) * pixelSize;
+                const size_t paddedY = row * strideY + FontAtlasPadding + y;
+                const size_t paddedX = col * strideX + FontAtlasPadding;
+                char *destination = pixels.data() + (paddedY * width + paddedX) * pixelSize;
+                if (whiteMask) {
+                    for (int x = 0; x < glyphSize.x; ++x)
+                        destination[x * pixelSize + 3] = source[x * pixelSize + 3];
+                } else {
+                    std::memcpy(destination, source, glyphSize.x * pixelSize);
+                }
+            }
+        }
+    }
+
+    image.data = std::move(pixels);
+    image.w = width;
+    image.h = height;
+    image.npot_scalex = static_cast<double>(columns * strideX) / width;
+    image.npot_scaley = static_cast<double>(rows * strideY) / height;
+    return true;
+}
+
+static void BlendParallaxEdges(image_t &image, bool horizontal) {
+    const size_t length = horizontal ? image.w : image.h;
+    const size_t rows = horizontal ? image.h : image.w;
+    const size_t span = std::min(length / 2, std::max<size_t>(1, length / 40));
+    if (span == 0)
+        return;
+
+    constexpr size_t bytesPerPixel = 4;
+    const size_t step = horizontal ? bytesPerPixel : bytesPerPixel * image.w;
+    const size_t rowStep = horizontal ? bytesPerPixel * image.w : bytesPerPixel;
+    auto *pixels = reinterpret_cast<uint8_t *>(image.data.data());
+
+    // Match the two edge texels, easing back to the original art over the
+    // neighboring texels. Weight RGB by alpha so foliage edges stay clear.
+    for (size_t offset = 0; offset < span; ++offset) {
+        const float t = static_cast<float>(offset) / span;
+        const float mix = (1.0f - t * t * (3.0f - 2.0f * t)) * 0.5f;
+        for (size_t row = 0; row < rows; ++row) {
+            auto *first = pixels + row * rowStep + offset * step;
+            auto *last = pixels + row * rowStep + (length - 1 - offset) * step;
+            const float firstAlpha = first[3];
+            const float lastAlpha = last[3];
+            const float alphaAtFirst = firstAlpha * (1.0f - mix) + lastAlpha * mix;
+            const float alphaAtLast = firstAlpha * mix + lastAlpha * (1.0f - mix);
+            for (int channel = 0; channel < 3; ++channel) {
+                const float a = first[channel] * firstAlpha;
+                const float b = last[channel] * lastAlpha;
+                first[channel] = alphaAtFirst > 0.0f ? std::lround((a * (1.0f - mix) + b * mix) / alphaAtFirst) : 0;
+                last[channel] = alphaAtLast > 0.0f ? std::lround((a * mix + b * (1.0f - mix)) / alphaAtLast) : 0;
+            }
+            first[3] = std::lround(alphaAtFirst);
+            last[3] = std::lround(alphaAtLast);
+        }
+    }
+}
+
+// GL_LINEAR mixes straight RGB before alpha blending. Give invisible edge texels
+// the color of the visible neighbors so interpolation cannot introduce a black fringe.
+static void ExtendTransparentColors(image_t &image, bool repeatX, bool repeatY) {
+    auto *rgba = reinterpret_cast<uint8_t *>(image.data.data());
+    const int width = static_cast<int>(image.w);
+    const int height = static_cast<int>(image.h);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            auto *pixel = rgba + (static_cast<size_t>(y) * width + x) * 4;
+            if (pixel[3] != 0)
+                continue;
+            unsigned sum[3]{};
+            unsigned weight = 0;
+            for (int dy = -1; dy <= 1; ++dy) {
+                int sy = y + dy;
+                if (sy < 0 || sy >= height) {
+                    if (!repeatY) continue;
+                    sy = sy < 0 ? height - 1 : 0;
+                }
+                for (int dx = -1; dx <= 1; ++dx) {
+                    int sx = x + dx;
+                    if (sx < 0 || sx >= width) {
+                        if (!repeatX) continue;
+                        sx = sx < 0 ? width - 1 : 0;
+                    }
+                    const auto *neighbor = rgba + (static_cast<size_t>(sy) * width + sx) * 4;
+                    const unsigned alpha = neighbor[3];
+                    weight += alpha;
+                    for (int c = 0; c < 3; ++c)
+                        sum[c] += alpha * neighbor[c];
+                }
+            }
+            if (weight)
+                for (int c = 0; c < 3; ++c)
+                    pixel[c] = static_cast<uint8_t>((sum[c] + weight / 2) / weight);
+        }
+    }
+}
+
 bool SDL_LoadTexture(const std::string &path,
                      const std::string &filename,
                      void *buf,
                      unsigned int buf_size,
-                     TextureHandle &th) {
+                     TextureHandle &th,
+                     TextureLayout layout,
+                     SDL_Point glyphSize) {
+    th = TextureHandle{};
     image_t image;
     bool success = false;
     bool load_from_memory = buf_size > 0;
     std::string fullpath;
     std::string filename_sans_ext(filename);
     ReplaceAll(filename_sans_ext, ".png", "");
+    const auto pngPath = path + "/" + filename;
+    const bool horizontalParallax = layout == TextureLayout::Parallax;
+    const bool verticalParallax = layout == TextureLayout::VerticalParallax;
+    const bool repeating = layout == TextureLayout::Repeat || layout == TextureLayout::MirrorRepeat ||
+                           horizontalParallax || verticalParallax;
+    const bool padGlyphs = layout == TextureLayout::Font && glyphSize.x > 0 && glyphSize.y > 0 && fs::is_regular_file(pngPath)
+#if defined(USE_ETC1)
+        && !DirectGraphics.IsETC1Supported()
+#endif
+        ;
 
     if (load_from_memory && !buf) {
         Protokoll << "Error in SDL_LoadTexture() loading texture from memory!" << std::endl;
@@ -77,7 +211,7 @@ bool SDL_LoadTexture(const std::string &path,
     }
 
 #if defined(USE_ETC1)
-    if (DirectGraphics.IsETC1Supported()) {
+    if (!repeating && DirectGraphics.IsETC1Supported()) {
         image_t alpha_image;
 
         // First, load the RGB texture:
@@ -106,7 +240,7 @@ bool SDL_LoadTexture(const std::string &path,
 #endif
 
 #if defined(USE_PVRTC)
-    if (DirectGraphics.IsPVRTCSupported()) {
+    if (!repeating && !padGlyphs && DirectGraphics.IsPVRTCSupported()) {
         fullpath = path + "/pvr/" + filename + ".pvr";
 
 #ifndef NDEBUG
@@ -123,8 +257,29 @@ bool SDL_LoadTexture(const std::string &path,
     }
 #endif
 
-    fullpath = path + "/" + filename;
-    success = loadImageSDL(image, fullpath, buf, buf_size) && load_texture(image, th.tex);
+    success = loadImageSDL(image, pngPath, buf, buf_size, repeating);
+    if (success && padGlyphs)
+        th.paddedGlyphs = PadFontAtlas(image, glyphSize, filename == "menufont.png");
+    if (success && (horizontalParallax || verticalParallax))
+        BlendParallaxEdges(image, horizontalParallax);
+    if (success && layout != TextureLayout::Font)
+        ExtendTransparentColors(image, horizontalParallax || layout == TextureLayout::Repeat,
+                                verticalParallax || layout == TextureLayout::Repeat);
+    success = success && load_texture(image, th.tex);
+    if (success && (th.paddedGlyphs || verticalParallax))
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    if (success && (th.paddedGlyphs || horizontalParallax))
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (success && (layout == TextureLayout::MirrorRepeat || horizontalParallax)) {
+#if defined(USE_GLES1)
+        if (DirectGraphics.ExtensionSupported("GL_OES_texture_mirrored_repeat"))
+#endif
+        {
+            if (layout == TextureLayout::MirrorRepeat)
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
+        }
+    }
     image.data = std::vector<char>();
 
     if (success)
@@ -135,6 +290,8 @@ bool SDL_LoadTexture(const std::string &path,
 loaded:
     if (success) {
         th.instances = 1;
+        if (layout == TextureLayout::Sprite)
+            th.halfTexel = {0.5f / image.w, 0.5f / image.h};
         th.npot_scalex = image.npot_scalex;
         th.npot_scaley = image.npot_scaley;
     } else {
@@ -327,7 +484,7 @@ bool loadImagePVRTC(image_t &image, const std::string &fullpath) {
 }
 #endif
 
-bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsigned int buf_size) {
+bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsigned int buf_size, bool nativeSize) {
     SDL_Surface *rawSurf = nullptr;  // This surface will tell us the details of the image
     SDL_Surface *finSurf = nullptr;
 
@@ -369,7 +526,7 @@ bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsign
         // DKS - Allowing NPOT textures is now a command line switch:
         //      The safest thing seems to me to leave it off unless specifically requested,
         //      since some GPUs/drivers do not play nicely with it and old GL/GLES doesn't even pretend to.
-        if (!CommandLineParams.AllowNPotTextureSizes) {
+        if (!nativeSize && !CommandLineParams.AllowNPotTextureSizes) {
             //  Check if surface is PoT
             if (!isPowerOfTwo(rawSurf->w)) {
                 rawDimensions.x = nextPowerOfTwo(rawSurf->w);
@@ -392,12 +549,32 @@ bool loadImageSDL(image_t &image, const std::string &fullpath, void *buf, unsign
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
         SDL_SetSurfaceAlphaMod(rawSurf, 255);
+        SDL_SetSurfaceBlendMode(rawSurf, SDL_BLENDMODE_NONE);
 #else /* SDL 1.2 */
         SDL_SetAlpha(rawSurf, 0, 0);
 #endif
 
+        SDL_FillRect(finSurf, nullptr, 0);
         SDL_BlitSurface(rawSurf, nullptr, finSurf, nullptr);
         SDL_FreeSurface(rawSurf);
+
+#if defined(USE_GLES1) || defined(USE_GLES2)
+        // Limited NPOT implementations only allow clamping. Fill the whole
+        // texture on those devices so repeating still avoids transparent padding.
+        if (nativeSize && (!isPowerOfTwo(finSurf->w) || !isPowerOfTwo(finSurf->h)) &&
+            !DirectGraphics.ExtensionSupported("GL_OES_texture_npot")) {
+            SDL_Surface *expanded = SDL_CreateRGBSurface(SDL_SWSURFACE, nextPowerOfTwo(finSurf->w),
+                nextPowerOfTwo(finSurf->h), 32, finSurf->format->Rmask, finSurf->format->Gmask,
+                finSurf->format->Bmask, finSurf->format->Amask);
+            if (!expanded || SDL_SoftStretch(finSurf, nullptr, expanded, nullptr) != 0) {
+                SDL_FreeSurface(expanded);
+                SDL_FreeSurface(finSurf);
+                return false;
+            }
+            SDL_FreeSurface(finSurf);
+            finSurf = expanded;
+        }
+#endif
 
         uint8_t factor = 1;
 
@@ -455,21 +632,13 @@ std::vector<char> LowerResolution(SDL_Surface *surface, int factor) {
         return std::vector<char>();
     }
 
-    std::vector<char> dataout;
-    dataout.reserve(
-        static_cast<size_t>(surface->h / factor) * static_cast<size_t>(surface->w / factor) * sizeof(uint32_t)
-    );
-
-    uint32_t *dataout32 = reinterpret_cast<uint32_t *>(dataout.data());
-
-    for (int y = 0; y < surface->h; y += factor) {
-        uint32_t *datain32 = (reinterpret_cast<uint32_t *>(surface->pixels)) + surface->w * y;
-        for (int x = 0; x < surface->w; x += factor) {
-            *dataout32 = *datain32;
-            datain32 += factor;
-            dataout32++;
-        }
+    const int width = surface->w / factor;
+    const int height = surface->h / factor;
+    std::vector<char> dataout(static_cast<size_t>(width) * height * 4);
+    for (int y = 0; y < height; ++y) {
+        const auto *row = static_cast<const char *>(surface->pixels) + y * factor * surface->pitch;
+        for (int x = 0; x < width; ++x)
+            std::memcpy(dataout.data() + (static_cast<size_t>(y) * width + x) * 4, row + x * factor * 4, 4);
     }
-
     return dataout;
 }

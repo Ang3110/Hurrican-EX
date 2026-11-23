@@ -489,7 +489,7 @@ void GegnerSpinnenmaschine::DoKI() {
                 SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
                 ScrolltoPlayeAfterBoss();
 
-                ShakeScreen(5.0f);
+                ShakeAtCenter(5.0f);
 
                 // Splitter und Große Explosionen
                 for (int i = 0; i < 10; i++) {

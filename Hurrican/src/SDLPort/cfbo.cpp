@@ -29,17 +29,15 @@
 
 CFbo::CFbo()
     : Enabled(false),
-      texture(GL_INVALID_VALUE),
-      framebuffer(GL_INVALID_VALUE),
-      width(0),
-      height(0) {}
+      texture(0),
+      framebuffer(0) {}
 
-bool CFbo::Open(uint16_t w, uint16_t h) {
+bool CFbo::Open(int w, int h, bool fullColor) {
     Enabled = false;
 
 #if defined(__WIN32__)
     if (glBindFramebuffer && glDeleteFramebuffers && glGenFramebuffers && glCheckFramebufferStatus &&
-        glFramebufferTexture2D && glGenRenderbuffers && glBindRenderbuffer && glRenderbufferStorage &&
+        glFramebufferTexture2D && glFramebufferRenderbuffer && glGenRenderbuffers && glBindRenderbuffer && glRenderbufferStorage &&
         glDeleteRenderbuffers) {
         Protokoll << "FBO supported" << std::endl;
     } else {
@@ -53,9 +51,11 @@ bool CFbo::Open(uint16_t w, uint16_t h) {
     glBindTexture(GL_TEXTURE_2D, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    textureFiltering = true;
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, nullptr);
+    const GLenum pixelType = fullColor ? GL_UNSIGNED_BYTE : GL_UNSIGNED_SHORT_5_6_5;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB, pixelType, nullptr);
     /* Create the framebuffer reference */
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -94,13 +94,41 @@ bool CFbo::Open(uint16_t w, uint16_t h) {
             break;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (!Enabled)
+        Close();
 
     return Enabled;
 }
 
-void CFbo::BindTexture(bool active) {
+bool CFbo::EnsureStencil(int width, int height) {
+    if (stencilAttempted)
+        return stencil != 0;
+
+    stencilAttempted = true;
+    glGenRenderbuffers(1, &stencil);
+    if (!stencil)
+        return false;
+    glBindRenderbuffer(GL_RENDERBUFFER, stencil);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_STENCIL_INDEX8, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, stencil);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glDeleteRenderbuffers(1, &stencil);
+        stencil = 0;
+    }
+    return stencil != 0;
+}
+
+void CFbo::BindTexture(bool active, bool filtering) {
     if (active) {
         glBindTexture(GL_TEXTURE_2D, texture);
+        if (textureFiltering != filtering) {
+            const GLenum filter = filtering ? GL_LINEAR : GL_NEAREST;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+            textureFiltering = filtering;
+        }
 #if defined(USE_GL1)
         glEnable(GL_TEXTURE_2D);
 #endif
@@ -113,11 +141,17 @@ void CFbo::BindTexture(bool active) {
 }
 
 void CFbo::Close() {
-    if (Enabled == true) {
+    if (texture)
         glDeleteTextures(1, &texture);
+    if (stencil)
+        glDeleteRenderbuffers(1, &stencil);
+    if (framebuffer) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDeleteFramebuffers(1, &framebuffer);
     }
+    texture = framebuffer = stencil = 0;
+    stencilAttempted = false;
+    Enabled = false;
 }
 
 #endif /* USE_FBO */
