@@ -56,7 +56,8 @@ void GegnerLift::DoKI() {
                 yAcc = 0.0f;
 
                 for (int p = 0; p < NUMPLAYERS; p++)
-                    Player[p].AufPlattform = nullptr;
+                    if (Player[p].AufPlattform == this)
+                        Player[p].AufPlattform = nullptr;
 
                 SoundManager.PlayWave(100, 128, 8000 + GetRandom(4000), SOUND::EXPLOSION1);
             }

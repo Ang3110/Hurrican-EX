@@ -5,9 +5,6 @@
 #include "enemies/Gegner_Stuff.hpp"
 
 class GegnerFloating : public GegnerClass {
-  private:
-    bool playeron;
-
   public:
     GegnerFloating(int Wert1,
                    int Wert2,  // Konstruktor

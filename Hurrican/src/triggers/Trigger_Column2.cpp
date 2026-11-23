@@ -70,8 +70,6 @@ void GegnerColumn2::DoDraw() {
 #if defined(USE_GL1)
     load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
 #endif
-
-    SetScreenShake();
 }
 
 // --------------------------------------------------------------------------------------
@@ -146,5 +144,5 @@ void GegnerColumn2::GegnerExplode() {
 
     SoundManager.PlayWave(100, 128, 11025 + GetRandom(2000), SOUND::STONEEXPLODE);
 
-    ShakeScreen(2.0f);
+    ShakeAtCenter(2.0f);
 }

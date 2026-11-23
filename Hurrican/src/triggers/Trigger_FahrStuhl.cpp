@@ -28,7 +28,8 @@ GegnerFahrstuhl::GegnerFahrstuhl(int Wert1, int Wert2, bool Light) {
     OwnDraw = true;
 
     if (Value1 == 0) {
-        TileEngine.ParallaxLayer[2].LoadImage("fahrstuhl_parallax.png", 400, 480, 400, 480, 1, 1);
+        TileEngine.ParallaxLayer[2].LoadImage("fahrstuhl_parallax.png", 400, 480, 400, 480, 1, 1,
+                                            TextureLayout::VerticalParallax);
         TileEngine.IsElevatorLevel = true;
     }
 }
@@ -39,12 +40,13 @@ GegnerFahrstuhl::GegnerFahrstuhl(int Wert1, int Wert2, bool Light) {
 
 void GegnerFahrstuhl::DoDraw() {
     DirectGraphics.SetFilterMode(true);
+    const float liftY = g_Fahrstuhl_yPos >= 0.0f ? g_Fahrstuhl_yPos : yPos;
 
     // Schatten rendern
-    float l = static_cast<float>(g_Fahrstuhl_yPos) - TileEngine.YOffset - 80.0f;
+    float l = liftY - TileEngine.YOffset - 80.0f;
     pGegnerGrafix[GegnerArt]->RenderSpriteScaled(
         xPos - TileEngine.XOffset - 10.0f,
-        static_cast<float>(g_Fahrstuhl_yPos) - TileEngine.YOffset,
+        liftY - TileEngine.YOffset,
         GegnerRect[GegnerArt].right + 20,
         static_cast<int>(static_cast<float>(GegnerRect[GegnerArt].bottom) + l / 5.0f),
         AnimPhase, 0x99000000);
@@ -53,7 +55,7 @@ void GegnerFahrstuhl::DoDraw() {
 
     // Fahrstuhl rendern
     pGegnerGrafix[GegnerArt]->RenderSprite(xPos - TileEngine.XOffset,
-                                           g_Fahrstuhl_yPos - TileEngine.YOffset, AnimPhase,
+                                           liftY - TileEngine.YOffset, AnimPhase,
                                            0xFFFFFFFF);
 }
 
@@ -68,17 +70,26 @@ void GegnerFahrstuhl::DoKI() {
     // Feststellen ob der Hurri auf dem Fahrstuhl steht
     PlattformTest(GegnerRect[GegnerArt]);
 
-    for (int p = 0; p < NUMPLAYERS; p++)
-        if (Player[p].AufPlattform == this) {
-            if (Handlung != GEGNER::FALLEN) {
-                if (Value1 == 0) {
-                    TileEngine.Zustand = TileStateEnum::LOCKED;
-                } else if (TileEngine.Zustand != TileStateEnum::SCROLLTOPLAYER)
-                    TileEngine.ScrollLevel(xPos - 50.0f, yPos - 400.0f, TileStateEnum::SCROLLTOLOCK);
+    if (Handlung != GEGNER::FALLEN) {
+        int riders = 0;
+        int waiting = 0;
+        for (int p = 0; p < NUMPLAYERS; ++p) {
+            if (CoopPlayerReady(Player[p]) && Player[p].AufPlattform == this) {
+                ++riders;
+                waiting = p;
             }
-
-            Handlung = GEGNER::FALLEN;  // Fahrstuhl fährt los
         }
+
+        if (riders == 1 && CoopNeedsPartner()) {
+            WaitForCoopPartner(waiting);
+        } else if (riders > 0) {
+            if (Value1 == 0)
+                TileEngine.Zustand = TileStateEnum::LOCKED;
+            else if (TileEngine.Zustand != TileStateEnum::SCROLLTOPLAYER)
+                TileEngine.ScrollLevel(xPos - 50.0f, yPos - 400.0f, TileStateEnum::SCROLLTOLOCK);
+            Handlung = GEGNER::FALLEN;
+        }
+    }
 
     // Je nach Handlung richtig verhalten
     switch (Handlung) {
@@ -94,14 +105,19 @@ void GegnerFahrstuhl::DoKI() {
             // Spieler "auf" den Fahrstuhl setzen
             if (Value1 != 0) {
                 for (int p = 0; p < NUMPLAYERS; p++) {
+                    if (!CoopPlayerReady(Player[p]))
+                        continue;
                     Player[p].JumpPossible = false;
                     Player[p].ypos = yPos - Player[p].CollideRect.bottom;
                 }
 
                 if (TileEngine.Zustand == TileStateEnum::LOCKED)
                     new_ySpeed = 8.0f;
-            } else
+            } else if (CoopLiftWaitingForBoss()) {
+                ySpeed = new_ySpeed = 0.0f;
+            } else {
                 new_ySpeed = Player[0].AutoScrollspeed;
+            }
 
             // Speed angleichen
             if (ySpeed < new_ySpeed)
@@ -141,8 +157,11 @@ void GegnerFahrstuhl::DoKI() {
     if (Value1 == 0 && yPos >= Value2)
         Energy = 0.0f;
 
-    g_Fahrstuhl_yPos = yPos;
-    g_Fahrstuhl_Speed = ySpeed;
+    // Keep free exploration and respawn points active at a stationary exit lift.
+    if (Value1 == 0 || Handlung == GEGNER::FALLEN || !CoopNeedsPartner()) {
+        g_Fahrstuhl_yPos = yPos;
+        g_Fahrstuhl_Speed = ySpeed;
+    }
 }
 
 // --------------------------------------------------------------------------------------
@@ -152,7 +171,7 @@ void GegnerFahrstuhl::DoKI() {
 void GegnerFahrstuhl::GegnerExplode() {
     FahrstuhlPos = -1.0f;
 
-    ShakeScreen(10);
+    ShakeAtCenter(10);
     SoundManager.PlayWave(100, 128, 11025, SOUND::EXPLOSION2);
 
     for (int j = 0; j < 100; j++)
@@ -175,6 +194,8 @@ void GegnerFahrstuhl::GegnerExplode() {
     // Spieler springt ab
     //
     for (int p = 0; p < NUMPLAYERS; p++) {
+        if (!CoopPlayerReady(Player[p]))
+            continue;
         Player[p].JumpPossible = false;
         Player[p].AnimPhase = 0;
         Player[p].Handlung = PlayerActionEnum::SPRINGEN;

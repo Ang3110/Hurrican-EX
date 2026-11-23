@@ -133,7 +133,7 @@ void GegnerPresswurst::DoKI() {
                                             static_cast<int>(yPos + 330.0f), 11025,
                                             SOUND::DOORSTOP);
 
-                ShakeScreen(2.0f);
+                ShakeAtCenter(2.0f);
 
                 Handlung = GEGNER::SPECIAL;
             }

@@ -5,6 +5,7 @@
 #include "enemies/Gegner_Stuff.hpp"
 
 class GegnerTutorialText : public GegnerClass {
+    std::array<bool, 2> receivedShockwave{};
   public:
     GegnerTutorialText(int Wert1,
                        int Wert2,  // Konstruktor

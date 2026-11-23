@@ -30,8 +30,7 @@ GegnerSecret::GegnerSecret(int Wert1, int Wert2, bool Light) {
 void GegnerSecret::DoKI() {
     // Secret nicht im Bild ?
     //
-    if (xPos + 10.0f < TileEngine.XOffset || xPos > TileEngine.XOffset + RENDERWIDTH ||
-        yPos + 10.0f < TileEngine.YOffset || yPos > TileEngine.YOffset + RENDERHEIGHT) {
+    if (!TileEngine.IsInPlayerViews(xPos, yPos, xPos + 10.0f, yPos + 10.0f, false)) {
         return;
     }
 
@@ -47,7 +46,7 @@ void GegnerSecret::DoKI() {
             for (int p = 0; p < NUMPLAYERS; p++)
                 if (SpriteCollision(xPos, yPos, GegnerRect[GegnerArt], Player[p].xpos, Player[p].ypos,
                                     Player[p].CollideRect) == true) {
-                    Player[0].SecretThisLevel++;
+                    Player[p].SecretThisLevel++;
                     Player[0].SecretFullGame++;
                     Handlung = GEGNER::FALLEN;
 
@@ -60,6 +59,7 @@ void GegnerSecret::DoKI() {
                     PartikelSystem.PushPartikel(xPos + 20.0f, yPos + 12.0f, TEXTSECRET);
                     PartikelSystem.PushPartikel(xPos - 100.0f, yPos - 100.0f, GRENADEFLARE);
                     PartikelSystem.PushPartikel(xPos + 5.0f, yPos + 5.0f, EXPLOSION_KRINGEL);
+                    break;
                 }
         } break;
     }

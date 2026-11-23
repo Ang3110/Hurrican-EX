@@ -6,7 +6,6 @@
 
 class GegnerFloating3 : public GegnerClass {
   private:
-    bool playeron;
     float winkel;
     float drehdir;
     float turncount;

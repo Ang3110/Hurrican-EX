@@ -23,7 +23,6 @@ GegnerFloating::GegnerFloating(int Wert1, int Wert2, bool Light) {
     ChangeLight = Light;
     Destroyable = false;
     AnimCount = 0.0f;
-    playeron = false;
 }
 
 // --------------------------------------------------------------------------------------
@@ -33,27 +32,11 @@ GegnerFloating::GegnerFloating(int Wert1, int Wert2, bool Light) {
 void GegnerFloating::DoKI() {
     BlickRichtung = DirectionEnum::RECHTS;
 
-    playeron = false;
-    for (int p = 0; p < NUMPLAYERS; p++)
-        if (Player[p].AufPlattform == this)
-            playeron = true;
-
-    PlattformTest(GegnerRect[GegnerArt]);
-
-    // Spieler in diesem Frame auf die Plattform gehopst ?
-    //
-    for (int p = 0; p < NUMPLAYERS; p++)
-        if (Player[p].AufPlattform == this && playeron == false) {
-            playeron = true;
-
-            // Plattform dopst kurz runter
-            //
-            if (ySpeed == 0.0f) {
-                Value2 = static_cast<int>(yPos);
-                ySpeed = static_cast<float>(Player[p].yspeed) / 3.0f;
-                yAcc = -3.0f;
-            }
-        }
+    if (auto *landing = PlattformTest(GegnerRect[GegnerArt]); landing && ySpeed == 0.0f) {
+        Value2 = static_cast<int>(yPos);
+        ySpeed = landing->yspeed / 3.0f;
+        yAcc = -3.0f;
+    }
 
     // Plattform wieder an Ausgangspos ?
     //

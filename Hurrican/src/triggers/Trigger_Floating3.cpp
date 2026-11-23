@@ -23,7 +23,6 @@ GegnerFloating3::GegnerFloating3(int Wert1, int Wert2, bool Light) {
     ChangeLight = Light;
     Destroyable = false;
     AnimCount = 0.0f;
-    playeron = false;
     winkel = 0.0f;
     turncount = 0.0f;
     drehdir = 0.0f;
@@ -55,37 +54,19 @@ void GegnerFloating3::DoDraw() {
 // --------------------------------------------------------------------------------------
 
 void GegnerFloating3::DoKI() {
-    playeron = false;
-
-    for (int p = 0; p < NUMPLAYERS; p++)
-        if (Player[p].AufPlattform == this)
-            playeron = true;
-
     switch (Handlung) {
         case GEGNER::STEHEN: {
-            PlattformTest(GegnerRect[GegnerArt]);
-
-            // Spieler in diesem Frame auf die Plattform gehopst ?
-            //
-            for (int p = 0; p < NUMPLAYERS; p++)
-                if (Player[p].AufPlattform == this && playeron == false) {
-                    playeron = true;
+            if (auto *landing = PlattformTest(GegnerRect[GegnerArt])) {
+                if (turncount == 0.0f) {
                     turncount = 0.01f;
-
-                    // Drehrichtung rausfinden
-                    if (Player[p].xpos + 35 < xPos + 50)
-                        drehdir = 1.0f;
-                    else
-                        drehdir = -1.0f;
-
-                    // Plattform dopst kurz runter
-                    //
-                    if (ySpeed == 0.0f) {
-                        Value2 = static_cast<int>(yPos);
-                        ySpeed = static_cast<float>(Player[p].yspeed) / 5.0f;
-                        yAcc = -3.0f;
-                    }
+                    drehdir = landing->xpos + 35 < xPos + 50 ? 1.0f : -1.0f;
                 }
+                if (ySpeed == 0.0f) {
+                    Value2 = static_cast<int>(yPos);
+                    ySpeed = landing->yspeed / 5.0f;
+                    yAcc = -3.0f;
+                }
+            }
 
             // Spieler war drauf? Dann Counter hochzählen, dass die Plattform sich bald dreht
             if (turncount > 0.0f)
@@ -100,13 +81,11 @@ void GegnerFloating3::DoKI() {
                             drehdir = 1.0f;
                         else
                             drehdir = -1.0f;
+                        Player[p].AufPlattform = nullptr;
                     }
-
-                    Player[p].AufPlattform = nullptr;
-
-                    turncount = 0.0f;
-                    Handlung = GEGNER::DREHEN;
                 }
+                turncount = 0.0f;
+                Handlung = GEGNER::DREHEN;
             }
         } break;
 

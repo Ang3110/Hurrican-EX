@@ -29,79 +29,44 @@ GegnerBruecke::GegnerBruecke(int Wert1, int Wert2, bool Light) {
 // --------------------------------------------------------------------------------------
 
 void GegnerBruecke::DoKI() {
-    // Brücke nicht im Bild ?
-    //
-    if (xPos + 10.0f < TileEngine.XOffset || xPos > TileEngine.XOffset + RENDERWIDTH ||
-        yPos + 10.0f < TileEngine.YOffset || yPos > TileEngine.YOffset + RENDERHEIGHT) {
+    const float rest = static_cast<float>(Value1);
+    const auto &link = GegnerRect[BRUECKE];
+    if (!TileEngine.IsInPlayerViews(xPos, rest, xPos + link.right, rest + link.bottom + 32.0f))
         return;
-    }
 
-    // Ausgangsposition
-    //
-
-    yPos = static_cast<float>(Value1);
-
-    if (options_Detail == DETAIL_MAXIMUM) {
-        // Irgendein Gegner steht auf der Brücke
-        //
-
-        for (auto& enemy: Gegner.enemies)
-        {
-            if (enemy->Active == true &&
-                enemy->GegnerArt != BRUECKE &&
-                enemy->GegnerArt != BRUECKE &&
-                enemy->GegnerArt != STAHLMUECKE &&
-                enemy->ySpeed == 0.0f &&
-                SpriteCollision(xPos, yPos, GegnerRect[GegnerArt], enemy->xPos, enemy->yPos,
-                                GegnerRect[enemy->GegnerArt]) == true) {
-
-                // DKS - Optimized
-                // w = (GegnerRect[enemy->GegnerArt].right  - GegnerRect[enemy->GegnerArt].left) / 2.0f;
-                // h = (GegnerRect[enemy->GegnerArt].bottom - GegnerRect[enemy->GegnerArt].top)  / 2.0f;
-                float w = (GegnerRect[enemy->GegnerArt].right - GegnerRect[enemy->GegnerArt].left) * 0.5f;
-                float h = (GegnerRect[enemy->GegnerArt].bottom - GegnerRect[enemy->GegnerArt].top) * 0.5f;
-
-                if (enemy->GegnerArt == DIAMANT)
-                    h = 2;
-
-                float dx = enemy->xPos + w - (xPos + 5);
-                float dy = enemy->yPos + h - (yPos + 5);
-
-                // DKS - converted to float:
-                // double a = sqrt ((dx * dx) + (dy * dy));
-                float a = sqrtf((dx * dx) + (dy * dy));
-
-                if (a > 40.0f)
-                    a = 40.0f;
-
-                if (enemy->GegnerArt == SPITTER)
-                    a += 13.0f;
-
-                // DKS - Optimized
-                // yPos = float (enemy->yPos + GegnerRect[enemy->GegnerArt].bottom - a / 2.5f + 13.0f);
-                yPos = enemy->yPos + static_cast<float>(GegnerRect[enemy->GegnerArt].bottom) - a * (1.0f / 2.5f) + 13.0f;
-            }
+    // Compare every load to the undeformed chain. Feet can touch the platform
+    // exactly without the two collision rectangles overlapping.
+    const auto bearsWeight = [&](float x, float y, const RECT_struct &body) {
+        const float feet = y + body.bottom;
+        return x + body.right > xPos && x + body.left < xPos + link.right &&
+               feet >= rest - 2.0f && feet <= rest + link.bottom + 2.0f;
+    };
+    float sag = 0.0f;
+    for (int p = 0; p < NUMPLAYERS; ++p) {
+        const auto &player = Player[p];
+        if (CoopPlayerReady(player) && player.yspeed >= 0.0f &&
+            bearsWeight(player.xpos, player.ypos, player.CollideRect)) {
+            const float distance = std::hypot(player.xpos + 35.0f - (xPos + 5.0f),
+                                              player.ypos + 40.0f - (rest + 5.0f));
+            sag = std::max(sag, 32.0f - distance / 1.5f);
         }
-
-        // Spieler steht auf der Brücke
-        // dann das Brückenteil je nach Entfernung zum Spieler nach unten verschieben
-        //
-        for (int p = 0; p < NUMPLAYERS; p++)
-            if (SpriteCollision(xPos, yPos, GegnerRect[GegnerArt], Player[p].xpos, Player[p].ypos,
-                                Player[p].CollideRect) == true &&
-                Player[p].yspeed >= 0.0f) {
-
-                float dx = (Player[p].xpos + 35.0f) - (xPos + 5.0f);
-                float dy = (Player[p].ypos + 40.0f) - (yPos + 5.0f);
-
-                // DKS - converted to float, optimized:
-                // double a = sqrt ((dx * dx) + (dy * dy));
-                // yPos = float (Value1 + (32 - a / 1.5f));
-                float a = sqrtf((dx * dx) + (dy * dy));
-                yPos = static_cast<float>(Value1) + (32.0f - a * (1.0f / 1.5f));
-            }
-    } else
-        yPos = static_cast<float>(Value1 + 3);
+    }
+    for (const auto &enemy : Gegner.enemies) {
+        if (!enemy->Active || enemy->DontMove || enemy->Energy <= 0.0f || enemy->ySpeed != 0.0f ||
+            enemy->GegnerArt == BRUECKE || enemy->GegnerArt == STAHLMUECKE)
+            continue;
+        const auto &body = GegnerRect[enemy->GegnerArt];
+        if (!bearsWeight(enemy->xPos, enemy->yPos, body))
+            continue;
+        const float w = (body.right - body.left) * 0.5f;
+        const float h = enemy->GegnerArt == DIAMANT ? 2.0f : (body.bottom - body.top) * 0.5f;
+        float distance = std::min(40.0f, std::hypot(enemy->xPos + w - (xPos + 5.0f),
+                                                   enemy->yPos + h - (rest + 5.0f)));
+        if (enemy->GegnerArt == SPITTER)
+            distance += 13.0f;
+        sag = std::max(sag, enemy->yPos + body.bottom - rest + 13.0f - distance / 2.5f);
+    }
+    yPos = rest + sag;
 }
 
 // --------------------------------------------------------------------------------------
