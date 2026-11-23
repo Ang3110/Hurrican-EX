@@ -61,20 +61,14 @@ void GegnerSpiderBomb::DoKI() {
             xSpeed = -xSpeed;
         }
 
-    if (ySpeed >= 0.0f)
-        // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-        // blocku = TileEngine.BlockSlopes(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt], ySpeed, true);
-        blocku = TileEngine.BlockSlopes(xPos, yPos, GegnerRect[GegnerArt], ySpeed);
-
-    if (!(blocku & BLOCKWERT_SCHRAEGE_R) && !(blocku & BLOCKWERT_SCHRAEGE_L))
-        blocku = TileEngine.BlockUnten(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
+    const bool onGround = blocku & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM | BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R);
 
     // Je nach Handlung richtig verhalten
     switch (Handlung) {
         case GEGNER::LAUFEN:  // Spinne läuft rum
         {
             // Kein Boden mehr unter den Füssen ? Dann runterfallen lassen
-            if (!(blocku & BLOCKWERT_WAND) && !(blocku & BLOCKWERT_PLATTFORM)) {
+            if (!onGround) {
                 Handlung = GEGNER::FALLEN;
                 yAcc = 5.0f;
                 ySpeed = 1.0f;
@@ -136,7 +130,7 @@ void GegnerSpiderBomb::DoKI() {
         case GEGNER::FALLEN:  // Spinne fällt runter
         {
             // Wieder Boden unter den Füssen ? Dann wieder normal laufen
-            if (blocku & BLOCKWERT_WAND || blocku & BLOCKWERT_PLATTFORM) {
+            if (onGround) {
                 Handlung = GEGNER::LAUFEN;
                 ySpeed = 0.0f;
                 yAcc = 0.0f;
@@ -157,7 +151,7 @@ void GegnerSpiderBomb::DoKI() {
 // --------------------------------------------------------------------------------------
 
 void GegnerSpiderBomb::GegnerExplode() {
-    ShakeScreen(5);
+    ShakeAtCenter(5);
 
     for (int i = 0; i < 6; i++)
         PartikelSystem.PushPartikel(xPos + 60.0f + static_cast<float>(GetRandom(80)),

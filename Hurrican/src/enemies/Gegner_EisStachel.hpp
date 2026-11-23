@@ -5,10 +5,12 @@
 #include "Gegner_Stuff.hpp"
 
 class GegnerEisStachel : public GegnerClass {
+    float patrolCenter = 0.0f;
+    float patrolRadius = -1.0f;
+    float patrolPhase = 0.0f;
+
   public:
-    GegnerEisStachel(int Wert1,
-                     int Wert2,  // Konstruktor
-                     bool Light);
+    GegnerEisStachel(float x, float y, int Wert1, int Wert2, bool Light);
     void GegnerExplode() override;  // Gegner explodiert
     void DoKI() override;           // Gegner individuell mit seiner eigenen kleinen KI bewegen
 };

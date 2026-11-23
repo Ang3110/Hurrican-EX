@@ -52,7 +52,8 @@ GegnerMade::GegnerMade(int Wert1, int Wert2, bool Light) {
 // --------------------------------------------------------------------------------------
 
 void GegnerMade::DoDraw() {
-    movesin += Timer.sync(0.8f);
+    if (AdvanceDrawEffects)
+        movesin += Timer.sync(0.8f);
 
     if (movesin > TWO_PI)
         movesin = 0.0f;

@@ -62,7 +62,7 @@ void GegnerPokeNuke::DoKI() {
 
 void GegnerPokeNuke::GegnerExplode() {
     SoundManager.PlayWave(100, 128, 8000 + GetRandom(4000), SOUND::EXPLOSION2);
-    ShakeScreen(7);
+    ShakeAtCenter(7);
 
     pAim = &Player[0];
     if (PlayerAbstand() < 160)

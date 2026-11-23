@@ -41,7 +41,7 @@ void GegnerWasserMine::GegnerExplode() {
     SoundManager.PlayWave(100, 128, 8000, SOUND::EXPLOSION3);
     SoundManager.PlayWave(100, 128, 14000, SOUND::EXPLOSION4);
 
-    ShakeScreen(5.0f);
+    ShakeAtCenter(5.0f);
 
     for (int i = 0; i < 50; i++)
         PartikelSystem.PushPartikel(xPos - 5.0f + static_cast<float>(GetRandom(40)),
