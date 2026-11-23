@@ -1,5 +1,5 @@
 --------------------------------
->    Hurrican Language File    <
+>    Hurrican language file    <
 >         - english -          <
 >    Poke53280   28.04.2007    <
 >          edited by           <
@@ -63,8 +63,8 @@ Wow, that shockwave destroyed the whole wall, killed the walker and even emptied
 One more aiming exercise... Hold down KEY_SHOOT and KEY_BLITZ simultaneously to charge your beam weapon. While charging, you can change the aiming direction with KEY_LEFT and KEY_RIGHT. Release the keys to fire the beam. The longer you charge the beam, the bigger the shot will be. Go in the middle and try to shoot the diamonds above you with the beam.
 The longer your lightning is, the faster the beam will charge. One more lesson - to the left you will learn about your two other primary weapon options besides the spread shot.
 Those were bounce shot extras. As you can see, powerups can even lie around like this. This shot can divide into two or more shots according to your current weapon level. Very useful in close tunnels or corridors like this one here.
-The last weapon for today is the laser. Collect the powerups and test it. Its special feature is that each one of its projectiles can slice through multiple enemies and destroy them all. You can cycle through your weapons with KEY_WAFFE_CYCLE. Try it some now.
-This is the end of the tutorial. In the game you will learn about additional powerups and other items. Just remember - experiment awhile with everything to learn how to use it. This tutorial was a bit easier than the normal levels - the nests did not spawn enemies and you were invulnerable. But now you should be prepared for combat. Good luck!
+The last weapon for today is the laser. Collect the powerups and test it. Its special feature is that each one of its projectiles can slice through multiple enemies and destroy them all. You can cycle through your weapons with KEY_WAFFE_PREV or KEY_WAFFE_CYCLE. Try it some now.
+This is the end of the tutorial. Hold KEY_SUMMARY to see what you've collected and what you're still missing. Checking this board is optional. In the game you will learn about additional powerups and other items. Just remember - experiment awhile with everything to learn how to use it. This tutorial was a bit easier than the normal levels - the nests did not spawn enemies and you were invulnerable. But now you should be prepared for combat. Good luck!
 36
 37
 38
@@ -88,14 +88,14 @@ Cheat unlocked:
 LOADING
 SAVE GAME
 START GAME
-BACK TO GAME
+RESUME GAME
 PREFERENCES
-HIGHSCORES
+HIGH SCORES
 CREDITS
 QUIT
 PLAY TUTORIAL
-START NEW GAME
-CONTINUE SAVED GAME
+NEW GAME
+LOAD GAME
 EASY
 NORMAL
 HARD
@@ -117,7 +117,7 @@ Load default settings
 Joypad
 Joystick
 UNBELIEVABLE
-NEW HIGHSCORE ON RANK
+NEW HIGH SCORE AT RANK
 ENTER YOUR NAME
 CONTINUE
 Back
@@ -144,18 +144,18 @@ DETAILS: MEDIUM
 DETAILS: HIGH
 DETAILS: MAXIMUM
 ONE PLAYER
-TWO PLAYER
+TWO PLAYERS
 Player one
 Player two
 type
 mode
 Sensitivity
 keyboard
-not defined
+unassigned
 stage
 player
 date
-- no entry -
+- empty -
 SECRET
 left
 right

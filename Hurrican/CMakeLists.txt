@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.16)
 project(hurrican)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/3rdparty/" "${CMAKE_SOURCE_DIR}/3rdparty/sdl2-cmake-scripts")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty")
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR
         "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -404,7 +404,8 @@ set(HURRICAN_SOURCES
         src/triggers/Trigger_Warning.cpp
         src/triggers/Trigger_Warning.hpp)
 
-if(MINGW)
+if(WIN32)
+    enable_language(RC)
     list(APPEND HURRICAN_SOURCES
         hurrican.rc
     )
@@ -513,71 +514,70 @@ if(UNIX)
     add_definitions(-DUSE_STORAGE_PATH="${CMAKE_INSTALL_PREFIX}/share/hurrican/")
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${CMAKE_SOURCE_DIR}/src/SDLPort)
-include_directories(${CMAKE_SOURCE_DIR}/3rdparty/glm)
 add_executable(${PROJECT_NAME} ${HURRICAN_SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE src src/SDLPort)
 
-# Enable pre compiled headers for way better compile times
-OPTION(USE_PRECOMPILED_HEADERS "Enable pre compiled headers for better compile times" ON)
-if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.16")
-    if(USE_PRECOMPILED_HEADERS)
-        target_precompile_headers(${PROJECT_NAME} PRIVATE src/stdafx.hpp)
-    endif()
+option(USE_PRECOMPILED_HEADERS "Enable precompiled headers" ON)
+if(USE_PRECOMPILED_HEADERS)
+    target_precompile_headers(${PROJECT_NAME} PRIVATE src/stdafx.hpp)
 endif()
 
-OPTION(OPENMPT "Use OPENMPT for ImpulseTracker music file decoding" OFF)
-IF(OPENMPT)
-    ADD_DEFINITIONS(-DUSE_OPENMPT)
-    target_link_libraries(${PROJECT_NAME} openmpt)
-ENDIF(OPENMPT)
-
-set(SDL2_BUILDING_LIBRARY TRUE)
-find_package(SDL2)
-if (SDL2_FOUND)
-    find_package(SDL2_image REQUIRED)
-    find_package(SDL2_mixer REQUIRED)
+find_package(glm CONFIG QUIET)
+if(TARGET glm::glm)
+    target_link_libraries(${PROJECT_NAME} PRIVATE glm::glm)
 else()
+    find_path(GLM_INCLUDE_DIR glm/glm.hpp HINTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/glm")
+    if(NOT GLM_INCLUDE_DIR)
+        message(FATAL_ERROR "GLM headers are required. Install the GLM development package.")
+    endif()
+    target_include_directories(${PROJECT_NAME} PRIVATE "${GLM_INCLUDE_DIR}")
+endif()
+
+option(LEGACY_SDL1 "Use SDL 1.2 on legacy platforms" OFF)
+if(LEGACY_SDL1)
     set(SDL_BUILDING_LIBRARY TRUE)
     find_package(SDL REQUIRED)
-    INCLUDE(FindSDL_mixer REQUIRED)
-    INCLUDE(FindSDL_image REQUIRED)
+    find_package(SDL_image REQUIRED)
+    find_package(SDL_mixer REQUIRED)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${SDL_INCLUDE_DIR} ${SDL_IMAGE_INCLUDE_DIRS} ${SDL_MIXER_INCLUDE_DIRS})
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${SDL_LIBRARY} ${SDL_IMAGE_LIBRARIES} ${SDL_MIXER_LIBRARIES})
+else()
+    find_package(SDL2 2.0.18 CONFIG REQUIRED)
+    find_package(SDL2_image CONFIG REQUIRED)
+    find_package(SDL2_mixer CONFIG REQUIRED)
+    if(WIN32)
+        set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE OUTPUT_NAME "Hurrican-EX")
+        target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2main)
+    endif()
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2_image::SDL2_image SDL2_mixer::SDL2_mixer)
 endif()
 
 find_package(LibEpoxy 1.2 REQUIRED)
+target_include_directories(${PROJECT_NAME} PRIVATE ${LibEpoxy_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${LibEpoxy_LIBRARIES})
 
-include_directories(${LibEpoxy_INCLUDE_DIRS})
-
-target_link_libraries(${PROJECT_NAME} ${LibEpoxy_LIBRARIES})
-
-if (SDL2_FOUND)
-    include_directories(${SDL2_INCLUDE_DIR}
-                        ${SDL2_IMAGE_INCLUDE_DIR}
-                        ${SDL2_MIXER_INCLUDE_DIR})
-
-    target_link_libraries(${PROJECT_NAME} ${SDL2_LIBRARY} ${SDL2_MIXER_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
-else()
-    include_directories(${SDL_INCLUDE_DIR}
-                        ${SDL_IMAGE_INCLUDE_DIR}
-                        ${SDL_MIXER_INCLUDE_DIR})
-
-    target_link_libraries(${PROJECT_NAME} ${SDL_LIBRARY} ${SDL_MIXER_LIBRARIES} ${SDL_IMAGE_LIBRARIES})
+option(OPENMPT "Use libopenmpt for ImpulseTracker music file decoding" OFF)
+if(OPENMPT)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(OpenMPT REQUIRED IMPORTED_TARGET libopenmpt)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_OPENMPT)
+    target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::OpenMPT)
 endif()
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
-    target_link_libraries(${PROJECT_NAME} stdc++fs)
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-    target_link_libraries(${PROJECT_NAME} c++fs)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.1)
+    target_link_libraries(${PROJECT_NAME} PRIVATE stdc++fs)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
+    target_link_libraries(${PROJECT_NAME} PRIVATE c++fs)
 endif()
 
 if(UNIX)
-    install(PROGRAMS  ${CMAKE_BINARY_DIR}/hurrican   DESTINATION bin/)
-    install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/      DESTINATION share/hurrican/data)
-    install(DIRECTORY ${CMAKE_SOURCE_DIR}/lang/      DESTINATION share/hurrican/lang)
-    install(FILES     ${CMAKE_SOURCE_DIR}/readme.txt DESTINATION share/doc/hurrican/)
+    install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
+    install(DIRECTORY data lang DESTINATION share/hurrican)
+    install(FILES readme.txt DESTINATION share/doc/hurrican)
 else()
-    install(PROGRAMS  ${CMAKE_BINARY_DIR}/hurrican   DESTINATION ./)
-    install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/      DESTINATION data)
-    install(DIRECTORY ${CMAKE_SOURCE_DIR}/lang/      DESTINATION lang)
-    install(FILES     ${CMAKE_SOURCE_DIR}/readme.txt DESTINATION ./)
+    install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+    install(DIRECTORY data lang DESTINATION .)
+    install(FILES readme.txt DESTINATION .)
 endif()

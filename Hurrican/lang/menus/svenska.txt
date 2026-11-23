@@ -1,0 +1,290 @@
+DISPLAY=BILD
+WINDOW MODE=FÖNSTERLÄGE
+WIDESCREEN=BILDFORMAT
+SPLITSCREEN TYPE=DELAD SKÄRM
+RESOLUTION=UPPLÖSNING
+VSYNC=V-SYNK
+TEXTURE FILTERING=TEXTURFILTER
+CRT FILTER=CRT-FILTER
+BRIGHTNESS=LJUSSTYRKA
+APPLY=VERKSTÄLL
+AUTO=AUTO
+STRETCHED 4:3=4:3 UTSTRÄCKT
+DESKTOP=SKRIVBORD
+DEFAULT=STANDARD
+FULLSCREEN=HELSKÄRM
+WINDOWED=FÖNSTER
+DYNAMIC=DYNAMISK
+ONE SCREEN=EN SKÄRM
+ON=PÅ
+OFF=AV
+UNAVAILABLE=EJ TILLGÄNGLIGT
+YES=JA
+NO=NEJ
+LOW=LÅG
+MEDIUM=MEDEL
+HIGH=HÖG
+Display mode unavailable=Bildläget är inte tillgängligt
+Applied. Could not save settings.=Ändringarna används men kunde inte sparas.
+Display settings saved=Bildinställningarna har sparats
+Some settings apply on level load or restart.=Vissa ändringar börjar gälla vid nästa bana eller omstart.
+VSync unavailable on this driver=Drivrutinen stöder inte V-synk
+Saved. VSync unavailable on this driver.=Sparat. Drivrutinen stöder inte V-synk.
+Reset controls=Återställ kontroller
+Player=Spelare
+Rumble=Vibration
+Reset=Återställ
+Pad=Handkontroll
+disconnected=frånkopplad
+Press input...=Tryck på en knapp...
+Crouch and Look Down need separate inputs=Huka och blick nedåt kräver olika knappar
+look left (COOP)=blick åt vänster (SAMARBETE)
+look right (COOP)=blick åt höger (SAMARBETE)
+summary board=samlaröversikt
+cycle weapons left=föregående vapen
+cycle weapons right=nästa vapen
+select spread=välj spridningsskott
+select laser=välj laser
+select bounce=välj studsskott
+key nav=[Piltangenter]
+pad nav=(styrkors / spak)
+key sides=[Vänster/Höger]
+pad sides=(Vänster/Höger)
+menu help={nav}    {ok} välj    {back} tillbaka
+binding help={nav}: spelare    {ok}: tilldela    {del}: ta bort
+cancel binding={back}: avbryt
+!!! CHEATER !!!=!!! FUSKARE !!!
+WAITING FOR P1=VÄNTAR PÅ S1
+WAITING FOR P2=VÄNTAR PÅ S2
+REGROUP TO CONTINUE=SAMLAS FÖR ATT FORTSÄTTA
+OpenGL and GCW Zero port by Pickle & Senquack=OpenGL- och GCW Zero-version av Pickle och Senquack
+Return=Retur
+Escape=Esc
+Delete=Delete
+Space=Mellanslag
+Backspace=Backsteg
+Left=Vänster
+Right=Höger
+Up=Upp
+Down=Ned
+D-pad=Styrkors
+Left Ctrl=Vänster Ctrl
+Right Ctrl=Höger Ctrl
+Left Shift=Vänster Skift
+Right Shift=Höger Skift
+PageUp=Sida upp
+PageDown=Sida ned
+LS click=Tryck LS
+RS click=Tryck RS
+english.lng=English
+deutsch.lng=Deutsch
+francais.lng=Français
+espanol.lng=Español
+italiano.lng=Italiano
+polski.lng=Polski
+portugues.lng=Português
+svenska.lng=Svenska
+D-pad Left=Styrkors Vänster
+D-pad Right=Styrkors Höger
+D-pad Up=Styrkors Upp
+D-pad Down=Styrkors Ned
+D-pad Up-Left=Styrkors Upp-Vänster
+D-pad Up-Right=Styrkors Upp-Höger
+D-pad Down-Left=Styrkors Ned-Vänster
+D-pad Down-Right=Styrkors Ned-Höger
+LS Left=LS Vänster
+LS Right=LS Höger
+LS Up=LS Upp
+LS Down=LS Ned
+LS Up-Left=LS Upp-Vänster
+LS Up-Right=LS Upp-Höger
+LS Down-Left=LS Ned-Vänster
+LS Down-Right=LS Ned-Höger
+RS Left=RS Vänster
+RS Right=RS Höger
+RS Up=RS Upp
+RS Down=RS Ned
+RS Up-Left=RS Upp-Vänster
+RS Up-Right=RS Upp-Höger
+RS Down-Left=RS Ned-Vänster
+RS Down-Right=RS Ned-Höger
+D-pad/LS Left=Styrkors/LS Vänster
+D-pad/LS Right=Styrkors/LS Höger
+D-pad/LS Up=Styrkors/LS Upp
+D-pad/LS Down=Styrkors/LS Ned
+D-pad/LS Up-Left=Styrkors/LS Upp-Vänster
+D-pad/LS Up-Right=Styrkors/LS Upp-Höger
+D-pad/LS Down-Left=Styrkors/LS Ned-Vänster
+D-pad/LS Down-Right=Styrkors/LS Ned-Höger
+[credits]
+- Hurrican -
+
+(c) 2007
+poke53280
+
+Jörg 'Eiswuxe' Winterstein
+
+Programmering
+Speldesign
+Ljud och musik
+Bandesign
+
+Thomas 'Turri' Schreiter
+
+Grafik
+Speldesign
+Fiendedesign
+Bandesign
+
+Ett särskilt tack till
+
+T.R.Schmidt och Gerhard 'ScHlAuChi' Weihrauch för extra bandesign och många förslag på förbättringar.
+
+Ett särskilt tack också till våra flitiga betatestare
+
+Wenkman, testledare
+Gereon 'ntroPi' Bartel
+Kai 'Flanderz' Schmiegelt
+Michael 'Ram-Brand' Dahms
+Carsten 'Jazzoid' Przyluczky
+Heiko 'TheWanderer' Kalista
+Matthias 'KingKiKapu' Klocke
+Manuel 'Heimdall' Rülke
+Friedrich 'BadData' Volmering
+Christian 'Gryphon' Kleinsteinberg
+Marc 'Dawn2069MS' Schmitt
+
+Ett stort tack till alla våra fans. Ni har peppat oss och trott på oss i åratal. Tack för att ni aldrig gav upp hoppet om Hurrican. Det här spelet är till er!
+
+Eiswuxe hälsar till
+
+Thorstein
+
+Jens
+
+Herbie och Edi
+
+Maroff och Anna
+
+Bumsmichl, tillsammans med Nina OCH linssoppan
+
+Jarlock
+
+Dan och Silke
+
+Sebastian och Doro
+
+Den ende och ojämförlige Markus Gottschalk
+
+Michael 'Skyrider' Matzka
+
+Andi, Simone och Johannes
+
+Stef, Margot och Reinhard
+
+Dalama
+Manuel 'Heimdall' Rülke
+Lars Kranebitter
+
+Windigo-Design
+Friedrich 'BadData' Volmering
+Carsten 'Jazzoid' Przyluczky
+Andi, din gamle tok, botten upp!
+
+Michael 'Gargoyle' Kreft
+
+Martin Lassahn är kanske den ende som förstår vår prövning, för han går igenom den själv. Håll ut ;)
+
+Matthias Schindler, din gamla dödsslampa
+
+Marc Kamradt
+
+Peter Schraut
+
+Philipp Dortmann
+
+David Zaadstra
+
+Janosch Dalecke
+
+Florian Eisele
+
+Uwe Wegener med Katrin och Vince ;)
+
+Resten av familjen Zealkind
+
+Nils 'Steele' Gey
+
+Alla på www.modarchive.com
+
+ChrisCrusher
+
+Alexander 'Jumperone' Krug och Softgames
+
+Sechsta Sinn: kämpa på... vi lyckades till slut ;)
+
+andUp
+
+Och inte att förglömma Steffan Kummer, den gamle ungkarlen!
+
+Givetvis Super Konrad Brothers, Dex, Bronko, RuvF, Aky, Contra-254 och alla andra Turrican-fans!
+
+Pekaro Soft
+
+Steve Harris :)
+
+Den sanne mästaren får vi inte glömma. En stor hälsning till Manne! Om ni letar noga kan ni hylla honom långt inne i djungeln...
+
+Och det bästa kommer förstås sist... Min lilla Kathrin. Älskar dig ;)
+
+Och nu är det Turris tur
+
+Hej mamma. Det var allt...
+
+...nej, långt ifrån!
+
+Jag hälsar till
+
+Min älskling, som jag älskar mer än allt annat
+
+Mina bröder Carsten och Dirki, den där veklingen
+
+En hälsning till Wenkman, vår hårdföre testare
+
+Alla på forumet som bidrog med så många idéer till Hurrican och stod vid vår sida i över fem år.
+
+Mina Poke-kompisar Wanderer och Skyrider, och...
+
+En hälsning till Markus 'Snake', som alltid tog så bra hand om vår webbplats.
+
+Hej Peer Draeger. Wit Wit Wit!
+
+Och resten av jobbarkompisarna: Marc Schmidt, Christian Kleinsteinberg, Uwe Wegener, Tetjana Obly Wobly ;-)
+
+Hej Boris Triebel. Titta, vi gav ut det! Hehehe.
+
+Marc Kamradt
+
+Hej Matthias, din gamla dödsslampa
+
+Och förstås Manfred Trenz, som förgyllde min ungdom med Turrican. För mig har han alltid varit mästaren.
+
+Hej alla killar och tjejer som läser det här och spelar Hurrican. Hoppas ni har kul :-)
+
+Hej Gigi och katten... och Crazy också
+
+Hej Adnan, min gamle festprisse och gode vän
+
+Hej till alla på rendering.de som så ofta hjälpte mig med grafiktips.
+
+Och hej till Krapfen
+
+Hej Thorsten Mutschall och Tanja Köhler. Hoppas ni har kul när ni spelar :-))
+Hej Micha Black Raven och hans förlorade själar.
+
+Hej alla i GVC Gamevoiceclan. Bäst någonsin... även om det är över nu.
+
+Hej Velociraptor
+
+Och hej till alla jag har glömt. Det är säkert en hel del :-)
+

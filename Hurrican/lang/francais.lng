@@ -1,5 +1,5 @@
 --------------------------------
->   Hurrican Fichier Langage   <
+>  Fichier de langue Hurrican  <
 >                              <
 >         - francais -         <
 >        par DLFRSILVER        <
@@ -63,8 +63,8 @@ Waouhh, cette onde de choc a detruit le mur tout entier, tue le walker et meme v
 Encore un exercice de visee... Maintenez KEY_SHOOT et KEY_BLITZ simultanement pour mettre votre arme en charge avec le faisceau. Pendant le chargement, vous pouvez changer la direction de la visee avec KEY_LEFT et KEY_RIGHT. Relachez les cles pour tirer avec le faisceau. Plus vous amenez le faisceau loin, plus le tir sera gros. Allez au milieu et essayez de tirer sur les diamants au dessus de vous avec le faisceau.
 Plus votre arc electrique est long, plus le faisceau se chargera vite. Encore une chose: sur la gauche vous prendrez connaissance des deux armes primaires qui existent en plus du tir en eclate.
 C'etait des tirs a rebond supplementaires. Comme vous le voyez, les powerups peuvent meme etre disposes de cette facon. Ce tir peut etre divise en deux tirs supplementaires suivant le niveau de l'arme que vous utilisez a l'instant. Tres utile dans des tunnels etroits ou des couloirs comme celui-ci.
-La derniere arme pour aujourd'hui est le laser. Ramassez les powerups et testez-le. Sa particularite est pouvoir tirer a travers plusieurs ennemis avec un seul projectile. Vous pouvez faire le tour de vos armes avec KEY_WAFFE_CYCLE. Amusez-vous un peu avec.
-Vous etes arrive a la fin du tutoriel. Dans le jeu vous rencontrerez certains powerups tout nouveau et d'autres. Gardez ceci a l'esprit: experimentez a gauche a droite avec tout ce que vous pouvez pour tout comprendre. Le tutoriel etait un peu plus facile que les niveaux normaux: les nids ne ressuscitent pas les ennemis et vous etiez invincible. Mais maintenant vous devez etre pret pour le combat. Bonne chance!
+La derniere arme pour aujourd'hui est le laser. Ramassez les powerups et testez-le. Sa particularite est pouvoir tirer a travers plusieurs ennemis avec un seul projectile. Vous pouvez faire le tour de vos armes avec KEY_WAFFE_PREV ou KEY_WAFFE_CYCLE. Amusez-vous un peu avec.
+Vous etes arrive a la fin du tutoriel. Maintiens KEY_SUMMARY pour voir tes trouvailles et ce qu'il te reste à découvrir. Ce bilan est facultatif. Dans le jeu vous rencontrerez certains powerups tout nouveau et d'autres. Gardez ceci a l'esprit: experimentez a gauche a droite avec tout ce que vous pouvez pour tout comprendre. Le tutoriel etait un peu plus facile que les niveaux normaux: les nids ne ressuscitent pas les ennemis et vous etiez invincible. Mais maintenant vous devez etre pret pour le combat. Bonne chance!
 36
 37
 38
@@ -86,16 +86,16 @@ Cheat debloque:
 - Appuyez sur une touche -
 //---------- Main Menu ----------//
 CHARGEMENT
-SAUVER LE JEU
-COMMENCER LE JEU
-RETOUR AU JEU
-PREFERENCES
-HIGHSCORES
-REMERCIEMENTS
+SAUVEGARDER
+COMMENCER
+REPRENDRE LA PARTIE
+PRÉFÉRENCES
+MEILLEURS SCORES
+GÉNÉRIQUE
 QUITTER
-UTILISER LE TUTORIEL
-COMMENCER NOUVELLE PARTIE
-CONTINUER UN JEU SAUVE
+JOUER AU TUTORIEL
+NOUVELLE PARTIE
+CHARGER UNE PARTIE
 FACILE
 NORMAL
 DIFFICILE
@@ -105,11 +105,11 @@ RANG
 NOM
 SCORE
 NIVEAU
-MODE
+NIV.
 VOLUME
 SON
 MUSIQUE
-CONFIGURER LES CONTROLES
+CONFIGURER LES COMMANDES
 CHOISIR LA LANGUE
 MODE:
 Retour de force
@@ -117,18 +117,18 @@ Parametres par defaut
 Joypad
 Joystick
 INCROYABLE
-NOUVEL HIGHSCORE 
+NOUVEAU RECORD AU RANG
 ENTREZ VOTRE NOM
 CONTINUER
-De retour
-marcher a gauche
-marcher a droite
-se baisser
+Retour
+marcher à gauche
+marcher à droite
+s'accroupir
 regarder en haut
 regarder en bas
-saut
-tir
-activer arc electrique
+sauter
+tirer
+activer l'arc électrique
 ligne de puissance
 grenade
 onde de choc
@@ -139,23 +139,23 @@ Axe X/Y
 D-pad
 -appuyez sur une nouvelle touche-
 -appuyez sur un nouveau bouton-
-DETAILS: FAIBLE
-DETAILS: MOYEN
-DETAILS: ELEVE
-DETAILS: MAXIMUM
+DÉTAILS : FAIBLES
+DÉTAILS : MOYENS
+DÉTAILS : ÉLEVÉS
+DÉTAILS : MAXIMUM
 UN JOUEUR
-DEUX JOUEUR
+DEUX JOUEURS
 Joueur un
 Joueur deux
 type
 mode
 Sensibilite
 clavier
-non defini
+non attribué
 niveau
 joueur
 date
-- pas d'entree -
+- vide -
 SECRET
 gauche
 droite

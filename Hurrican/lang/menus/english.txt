@@ -1,0 +1,290 @@
+DISPLAY=DISPLAY
+WINDOW MODE=WINDOW MODE
+WIDESCREEN=WIDESCREEN
+SPLITSCREEN TYPE=SPLITSCREEN TYPE
+RESOLUTION=RESOLUTION
+VSYNC=VSYNC
+TEXTURE FILTERING=TEXTURE FILTERING
+CRT FILTER=CRT FILTER
+BRIGHTNESS=BRIGHTNESS
+APPLY=APPLY
+AUTO=AUTO
+STRETCHED 4:3=STRETCHED 4:3
+DESKTOP=DESKTOP
+DEFAULT=DEFAULT
+FULLSCREEN=FULLSCREEN
+WINDOWED=WINDOWED
+DYNAMIC=DYNAMIC
+ONE SCREEN=ONE SCREEN
+ON=ON
+OFF=OFF
+UNAVAILABLE=UNAVAILABLE
+YES=YES
+NO=NO
+LOW=LOW
+MEDIUM=MEDIUM
+HIGH=HIGH
+Display mode unavailable=Display mode unavailable
+Applied. Could not save settings.=Applied. Could not save settings.
+Display settings saved=Display settings saved
+Some settings apply on level load or restart.=Some settings apply on level load or restart.
+VSync unavailable on this driver=VSync unavailable on this driver
+Saved. VSync unavailable on this driver.=Saved. VSync unavailable on this driver.
+Reset controls=Reset controls
+Player=Player
+Rumble=Rumble
+Reset=Reset
+Pad=Pad
+disconnected=disconnected
+Press input...=Press input...
+Crouch and Look Down need separate inputs=Crouch and Look Down need separate inputs
+look left (COOP)=look left (COOP)
+look right (COOP)=look right (COOP)
+summary board=summary board
+cycle weapons left=cycle weapons left
+cycle weapons right=cycle weapons right
+select spread=select spread
+select laser=select laser
+select bounce=select bounce
+key nav=[Arrows]
+pad nav=(D-pad / stick)
+key sides=[Left/Right]
+pad sides=(Left/Right)
+menu help={nav}    {ok} select    {back} back
+binding help={nav}: player    {ok}: add input    {del}: remove
+cancel binding={back}: cancel
+!!! CHEATER !!!=!!! CHEATER !!!
+WAITING FOR P1=WAITING FOR P1
+WAITING FOR P2=WAITING FOR P2
+REGROUP TO CONTINUE=REGROUP TO CONTINUE
+OpenGL and GCW Zero port by Pickle & Senquack=OpenGL and GCW Zero port by Pickle & Senquack
+Return=Enter
+Escape=Esc
+Delete=Delete
+Space=Space
+Backspace=Backspace
+Left=Left
+Right=Right
+Up=Up
+Down=Down
+D-pad=D-pad
+Left Ctrl=Left Ctrl
+Right Ctrl=Right Ctrl
+Left Shift=Left Shift
+Right Shift=Right Shift
+PageUp=Page Up
+PageDown=Page Down
+LS click=LS click
+RS click=RS click
+english.lng=English
+deutsch.lng=Deutsch
+francais.lng=Français
+espanol.lng=Español
+italiano.lng=Italiano
+polski.lng=Polski
+portugues.lng=Português
+svenska.lng=Svenska
+D-pad Left=D-pad Left
+D-pad Right=D-pad Right
+D-pad Up=D-pad Up
+D-pad Down=D-pad Down
+D-pad Up-Left=D-pad Up-Left
+D-pad Up-Right=D-pad Up-Right
+D-pad Down-Left=D-pad Down-Left
+D-pad Down-Right=D-pad Down-Right
+LS Left=LS Left
+LS Right=LS Right
+LS Up=LS Up
+LS Down=LS Down
+LS Up-Left=LS Up-Left
+LS Up-Right=LS Up-Right
+LS Down-Left=LS Down-Left
+LS Down-Right=LS Down-Right
+RS Left=RS Left
+RS Right=RS Right
+RS Up=RS Up
+RS Down=RS Down
+RS Up-Left=RS Up-Left
+RS Up-Right=RS Up-Right
+RS Down-Left=RS Down-Left
+RS Down-Right=RS Down-Right
+D-pad/LS Left=D-pad/LS Left
+D-pad/LS Right=D-pad/LS Right
+D-pad/LS Up=D-pad/LS Up
+D-pad/LS Down=D-pad/LS Down
+D-pad/LS Up-Left=D-pad/LS Up-Left
+D-pad/LS Up-Right=D-pad/LS Up-Right
+D-pad/LS Down-Left=D-pad/LS Down-Left
+D-pad/LS Down-Right=D-pad/LS Down-Right
+[credits]
+- Hurrican -
+
+(c) 2007
+poke53280
+
+Jörg 'Eiswuxe' Winterstein
+
+Programming
+Game design
+Sound and music
+Level design
+
+Thomas 'Turri' Schreiter
+
+Graphics
+Game design
+Enemy design
+Level design
+
+Special thanks to
+
+T.R.Schmidt and Gerhard 'ScHlAuChi' Weihrauch for additional level design and many suggestions for improvements.
+
+Special thanks also go to our tireless beta testers
+
+Wenkman, lead tester
+Gereon 'ntroPi' Bartel
+Kai 'Flanderz' Schmiegelt
+Michael 'Ram-Brand' Dahms
+Carsten 'Jazzoid' Przyluczky
+Heiko 'TheWanderer' Kalista
+Matthias 'KingKiKapu' Klocke
+Manuel 'Heimdall' Rülke
+Friedrich 'BadData' Volmering
+Christian 'Gryphon' Kleinsteinberg
+Marc 'Dawn2069MS' Schmitt
+
+A huge thank-you to all our fans. You kept us going and believed in us for years. Thanks for never giving up on Hurrican. This game is for you!
+
+Greetings from Eiswuxe to
+
+Thorstein
+
+Jens
+
+Herbie and Edi
+
+Maroff and Anna
+
+Bumsmichl, along with Nina AND the lentil soup
+
+Jarlock
+
+Dan and Silke
+
+Sebastian and Doro
+
+The one and only Markus Gottschalk
+
+Michael 'Skyrider' Matzka
+
+Andi, Simone and Johannes
+
+Stef, Margot and Reinhard
+
+Dalama
+Manuel 'Heimdall' Rülke
+Lars Kranebitter
+
+Windigo-Design
+Friedrich 'BadData' Volmering
+Carsten 'Jazzoid' Przyluczky
+Andi, you old joker: bottoms up!
+
+Michael 'Gargoyle' Kreft
+
+Martin Lassahn may be the only person who understands what we've been through, because he's going through it too. Hang in there ;)
+
+Matthias Schindler, you old deathslut
+
+Marc Kamradt
+
+Peter Schraut
+
+Philipp Dortmann
+
+David Zaadstra
+
+Janosch Dalecke
+
+Florian Eisele
+
+Uwe Wegener with Katrin and Vince ;)
+
+The rest of the Zealkind family
+
+Nils 'Steele' Gey
+
+Everyone at www.modarchive.com
+
+ChrisCrusher
+
+Alexander 'Jumperone' Krug and Softgames
+
+Sechsta Sinn: keep at it... we finally made it ;)
+
+andUp
+
+And let's not forget Steffan Kummer, the old confirmed bachelor!
+
+The Super Konrad Brothers, of course, plus Dex, Bronko, RuvF, Aky, Contra-254, and all the other Turrican fans!
+
+Pekaro Soft
+
+Steve Harris :)
+
+We couldn't leave out the true master. A big shout-out to Manne! Search carefully and you can pay your respects to him deep in the jungle...
+
+And the best for last, of course... My sweet Kathrin. I luv you ;)
+
+And now it's Turri's turn
+
+Hi, Mum. That's all...
+
+...well, hardly!
+
+Greetings to
+
+My sweetheart, whom I love more than anything
+
+My brothers Carsten and Dirki, the big softie
+
+Hi to Wenkman, our hardcore tester
+
+Everyone on the forum who shared so many ideas for Hurrican and stuck with us for over five years.
+
+My fellow Pokes, Wanderer and Skyrider, and...
+
+Hi to Markus 'Snake', who always took such great care of our website.
+
+Hi to Peer Draeger. Wit Wit Wit!
+
+And the rest of my workmates: Marc Schmidt, Christian Kleinsteinberg, Uwe Wegener, Tetjana Obly Wobly ;-)
+
+Hi to Boris Triebel. Look, we released it! Hehehe.
+
+Marc Kamradt
+
+Hi to Matthias, you old deathslut
+
+And of course Manfred Trenz, whose Turrican made my youth so much sweeter. To me he was always 'The Master'.
+
+Hi to all the guys and girls reading this and playing Hurrican. I hope you're having fun :-)
+
+Hi to Gigi and his cat... and Crazy, too
+
+Hi to Adnan, the old party animal and a good friend
+
+Hi to everyone at rendering.de who often helped me with graphics tips.
+
+And hi to Krapfen
+
+Hi to Thorsten Mutschall and Tanja Köhler. I hope you enjoy playing :-))
+Hi to Micha Black Raven and his lost souls.
+
+Hi to everyone in the GVC Gamevoiceclan. The best ever... even if it's over now.
+
+Hi to Velociraptor
+
+And hi to everyone I've forgotten. I'm sure that's quite a few :-)
+

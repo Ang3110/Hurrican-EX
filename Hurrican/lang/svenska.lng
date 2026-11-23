@@ -1,5 +1,5 @@
 --------------------------------
->      Hurrican Språkfil       <
+>    Språkfil för Hurrican     <
 >                              <
 >         - svenska -          <
 >             D-13             <
@@ -62,9 +62,9 @@ En vägg igen? VÄNTA! Vi skulle kunna använda blixten... men pröva istället att s
 Smartbomben förstörde hela väggen, förstörde gångaren och tömde till och med en tillbehörskloss. Men du kan endast bära en enda sån här smartbomb åt gången och måste skaffa en ny genom rätt sorts tillbehör när du använt den. Om symbolen i informationsfältet glöder (se pilen), så har du en smartbomb redo.
 En till övning för att sikta... Håll nere KEY_SHOOT och KEY_BLITZ samtidigt för att ladda ditt vapen med strålen. När du laddar kan du ändra var du siktar med KEY_LEFT och KEY_RIGHT. Släpp knapparna för att släppa lös strålen. Ju längre du laddar strålen, ju större kommer skottet vara. Gå till mitten och försök att skjuta diamanterna ovanför dig med strålen.
 Ju mer tillbehör du har för blixten, ju snabbare kommer strålen att ladda upp. En till sak: till vänster kommer du få lära dig om de två övriga huvudvapnen som finns utöver sprinkler-skott.
-Dessa var studsare. Tryck en gång på KEY_WAFFE_CYCLE för att byta till dem. Som du kan se så kan tillbehör även ligga runtomkring så här. Dessa skott kan splittras i två mindre skott beroende på din aktuella vapenkraft. Den  är väldigt användbar i trånga utrymmen, så som tunnlar och korridorer, som den här framme.
-Sista vapnet idag är lasern. Samla tillbehöret och testa den. Dess speciella egenskap är det faktum att den kan skjuta igenom flera fiender med ett och samma skott. Kom ihåg att du väljer mellan dina huvudvapen genom att trycka på KEY_WAFFE_CYCLE. Pröva lite och känn.
-Detta är slutet på träningsvärlden. I spelet kommer du få lära dig lite mer om vissa tillbehör och lite andra saker. Kom bara ihåg: exprimentera lite med allt möjlight för att förstå det bättre. Träningsvärlden är också lite enklare än de vanliga världarna: nästena skickade inte ut fiender och du var också odödlig här. Men nu är du nog redo för den riktiga fighten. Lycka till!
+Dessa var studsare. Tryck en gång på KEY_WAFFE_PREV eller KEY_WAFFE_CYCLE för att byta till dem. Som du kan se så kan tillbehör även ligga runtomkring så här. Dessa skott kan splittras i två mindre skott beroende på din aktuella vapenkraft. Den  är väldigt användbar i trånga utrymmen, så som tunnlar och korridorer, som den här framme.
+Sista vapnet idag är lasern. Samla tillbehöret och testa den. Dess speciella egenskap är det faktum att den kan skjuta igenom flera fiender med ett och samma skott. Kom ihåg att du väljer mellan dina huvudvapen genom att trycka på KEY_WAFFE_PREV eller KEY_WAFFE_CYCLE. Pröva lite och känn.
+Detta är slutet på träningsvärlden. Håll in KEY_SUMMARY för att se vad du har samlat och vad som saknas. Det är frivilligt att titta. I spelet kommer du få lära dig lite mer om vissa tillbehör och lite andra saker. Kom bara ihåg: exprimentera lite med allt möjlight för att förstå det bättre. Träningsvärlden är också lite enklare än de vanliga världarna: nästena skickade inte ut fiender och du var också odödlig här. Men nu är du nog redo för den riktiga fighten. Lycka till!
 36
 37
 38
@@ -87,29 +87,29 @@ Fusk upplåst:
 //---------- Main Menu ----------//
 LADDAR
 SPARA SPEL
-STARTA SPEL
-FORTSÄTT SPEL
+STARTA SPELET
+ÅTERUPPTA SPELET
 INSTÄLLNINGAR
-HIGHSCORES
-CREDITS
+TOPPLISTA
+MEDVERKANDE
 AVSLUTA
-SPELA TRÄNINGSVÄRLD
-STARTA NYTT SPEL
-FORTSÄTT SPARAT SPEL
+SPELA ÖVNINGSBANAN
+NYTT SPEL
+LADDA SPEL
 LÄTT
-NORMALT
+NORMAL
 SVÅRT
 HURRICAN
 pilar: ändra - enter : välj - ESC : tillbaka
-RANK
+PLATS
 NAMN
 POÄNG
-VÄRLD
-SVÅRIGHET
+BANA
+GRAD
 VOLYM
 LJUD
 MUSIK
-ÄNDRA KONTROLLER
+ANPASSA KONTROLLER
 VÄLJ SPRÅK
 SÄTT:
 Vibration
@@ -117,12 +117,12 @@ Ladda standardinställningarna
 Joypad
 Joystick
 OTROLIGT
-NY POÄNG PÅ RANK
+NYTT REKORD PÅ PLATS
 SKRIV DITT NAMN
 FORTSÄTT
 Tillbaka
-gå vänster
-gå höger
+gå åt vänster
+gå åt höger
 ducka
 titta upp
 titta ned
@@ -131,7 +131,7 @@ skjut
 aktivera blixten
 kraftlinje
 granat
-smartbomb
+stötvåg
 ändra huvudvapen
 gå
 titta
@@ -139,23 +139,23 @@ X/Y Axel
 D-pad
 -tryck ny tangent-
 -tryck ny knapp-
-DETALJER: LÅG
-DETALJER: MEDIUM
-DETALJER: HÖG
-DETALJER: MAXIMAL
+DETALJER: LÅGA
+DETALJER: MEDEL
+DETALJER: HÖGA
+DETALJER: HÖGSTA
 EN SPELARE
 TVÅ SPELARE
-spelare ett
-spelare två
+Spelare ett
+Spelare två
 typ
 sätt
 känslighet
 tangentbord
-- inget -
-värld
+ej tilldelad
+bana
 spelare
 datum
-- INGEN SPARNING -
+- tom -
 HEMLIGT
 vänster
 höger

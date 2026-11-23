@@ -1,5 +1,5 @@
 --------------------------------
->   Hurrican Language File     <
+>      Idioma de Hurrican      <
 >                              <
 >         - portugues -        <
 >         Raphael Belmont      <
@@ -30,20 +30,20 @@ Carregando modulo :
  ... OK
 Carregando dados do nivel para \n
 //---------- Textos Tutoriais ----------//
-Bem vindo ao Hurrican nivel tutorial. Aqui voce aprendera os comandos basicos. Voce pode mover para esquerda e direita pressionando seta_esquerda ou seta_direita. Voce pode agachar pressionando seta_baixo. Agora observe mais um pouco. Existem mais dicas como essa nesse nivel.
-Pressione tecla de pulo para pular. Quanto mais voce pressionar a tecla mais alto pulara. Voce pode mudar a direcao enquanto pula pressionando esquerda ou direita.
-Voce pode olhar ao redor pressionando para cima ou para baixo. Isso o ajuda a encontrar itens escondidos. Por exemplo, olhe para o teto acima de voce...
+Bem-vindo ao tutorial de Hurrican. Aqui você aprenderá os controles básicos. Use KEY_LEFT e KEY_RIGHT para andar e KEY_CROUCH para se agachar. Explore um pouco: há mais dicas como esta nesta fase.
+Pressione KEY_JUMP para pular. Quanto mais tempo segurar, mais alto será o salto. No ar, use KEY_LEFT ou KEY_RIGHT para mudar de direção.
+Use KEY_UP ou KEY_DOWN para olhar ao redor e encontrar itens escondidos. Por exemplo, olhe para o teto acima de você...
 Esses diamantes estao espalhados pelo nivel. Voce recebera pontos por coleta-los. Ainda a cada 50 diamantes coletados seu tempo enchera novamente.
-Pressione Tiro para atirar e mantenha pressionado para um lento auto-fogo. Pressionando a tecla constantemente voce pode atirar mais rapido do que o normal auto-fogo.
+Pressione KEY_SHOOT para atirar. Segure para ativar o disparo automático. Aperte repetidamente para atirar mais rápido.
 Agora olhe para a parede na sua direita. Nao parece muito solida. Tente destrui-la com sua arma.
 Muito bem. Existem muitos lugares que voce pode destruir paredes. Na maioria voce encontrara somente areas secretas.
-Agora um pouco de treinamento de mira. Voce pode mirar para cima pressionando Cima. Combinando com Esquerda ou Direita voce pode atirar na diagonal tambem. Agora tente acertar os diamantes acima de voce.
+Vamos treinar a mira. Use KEY_UP para mirar para cima. Combine com KEY_LEFT ou KEY_RIGHT para atirar na diagonal. Tente acertar os diamantes lá em cima.
 Agora esta ficando excitante... Embaixo voce encontrara os primeiros inimigos ou, digamos, as primeiras caixas contendo PowerUp.
 -atencao-
 Muito bem.Colete todos os PowerUp agora.
 Esse efeito foi o indicador de forca da sua arma. Pode ser notado pela cor do efeito. Vermelho e o tiro espalhado, azul e o laser e verde e o que rebate. As barras (nas setas) mostram o nivel atual da arma.
 E agora os primeiros inimigos reais: os caminhadores. Uma coisa especial sobre eles e que voce pode pular em cima deles para destrui-los.
-Novamente o caminho esta bloqueado, mas agora a parede destruivel esta abaixo de voce. Pressione Relampago e gire o raio com esquerda e direita para destruir a parede.
+O caminho está bloqueado de novo, mas desta vez a parede destrutível está embaixo. Segure KEY_BLITZ e gire o raio com KEY_LEFT e KEY_RIGHT para destruí-la.
 Muito bem. A proposito o raio pode destruir inimigos tambem. Infelizmente e um pouco curto...  Mas nao se preoculpe: e tudo questao de tecnica :) A direita estao alguns PowerUps para mudar isso.
 O raio e mais longo agora. Experimente! E o melhor: pode ir mais longe ainda. A barra ao lado do simbolo do relampago no HUD mostra o nivel atual. Quando voce perde uma vida, voce perdera um nivel do relampago tambem.
 Extras nao se encontram somente nas caixas flutuantes. Eles tambem podem ser encontrados no blocos PowerUp que somente aparecem quando sao atingidos uma primeira vez. Tente atirar por aqui ate voce encontar um (gire o relampago para facilitar um pouco)...
@@ -52,19 +52,19 @@ Esses foram os "powerlines", uma arma especial. O numero de powerlines pode ser 
 Fique no meio da ponte e pressione KEY_POWERLINE para ativar uma powerline.
 Woosh! Inimigos pequenos sao desintegrados e maiores sao danificados tambem. Agora colete os PowerUps.
 Esses PowerUps eram granadas. Elas fazem BOOM. Parece engracado mas e verdade :) Novamente a direita voce aprendera como usar esses itens.
-Cuidado, existem dois ninhos que podem causar um bom dano! Pressione KEY_GRANADA para jogar uma granada. Elas podem destruir tudo ao seu alcance. Para o segundo ninho voce precisara ficar abaixo e atirar pra cima.
-Parece sem saida novamente. Agache e ative a powerline simultaneamente. Voce mudara para a roda de aco. No fim do tunel, simplesmente pressione pulo para levantar-se novamente.
+Cuidado, existem dois ninhos que podem causar um bom dano! Pressione KEY_GRANATE para jogar uma granada. Elas podem destruir tudo ao seu alcance. Para o segundo ninho voce precisara ficar abaixo e atirar pra cima.
+Outro beco sem saída? Agache-se com KEY_CROUCH e ative a linha de energia com KEY_POWERLINE ao mesmo tempo. Você vai se transformar na roda de aço. Na saída do túnel, use KEY_JUMP para se levantar.
 Como voce deve ter notado (observe a seta) vai baixar quando voce rodar como a roda. Mas voce pode encher novamente com powerups. Porem ira encher por si so.
-Sim, esse foi o PowerUp da roda. Quando voce esta no modo roda, voce e invencivel e danifica inimigos. E como se nao bastasse, voce pode ate colocar bombas pressionando Tiro. Tente nos ninhos a direita.
+Isso foi uma melhoria para a roda. Na forma de roda você fica invencível e causa dano aos inimigos. Também pode colocar bombas com KEY_SHOOT. Experimente nos ninhos à direita.
 Wow, voce e uma maquina assassina agora! Mas o inventario nao esta completo ainda. Algumas armas irao ainda aparecer...
 Essas setas pelo caminho mostram onde e a saida.
 Uma parede novamente? Nos poderiamos usar o relampago... Mas espere! Fique ao lado da parede e pressione KEY_SHOCKWAVE ...
 Wow, aquele shock destruiu toda a parede, matou o caminhador e ate o powerblock. Mas voce pode carregar apenas uma dessas bombas por vez e deve enche-lo com o correspondente powerup quando usar. Se o simbolo no HUD brilhar (observe a seta), a bomba esta pronta para o uso.
-Mais um exercisio de mira... Pressione Tiro e Blitz simultaneamente para carregar sua arma e o raio. Enquanto carrega voce pode mudar a mira. Solte as teclas para atirar. Quanto mais longe maior sera o Tiro. Va ao meioe tente acertar os diamantes acima com o tiro.
+Mais um exercício de mira: segure KEY_SHOOT e KEY_BLITZ ao mesmo tempo para carregar um disparo. Use KEY_LEFT ou KEY_RIGHT para mirar enquanto carrega. Solte os comandos para atirar. Quanto mais carregar, maior será o disparo. Vá para o meio e tente acertar os diamantes acima.
 Quanto mais longe for seu raio mais rapido carregara. Mais uma coisa: a esquerda voce aprendera sobre as duas armas primarias.
 Esses foram extras do tiro. Como voce pode ver, powerups podem ate estar largados assim. Esse tiro pode se dividir em mais tiros de acordo com o nivel da arma. Muito bom em tuneis ou corredores como esse.
-A ultima arma e o laser. Pegue os PowerUps e teste. O bom dele e que pode atravessar inimigos com um tiro so. Voce pode mudar suas armas pressionando ciclo de armas. Tente um pouco.
-Esse e o fim do tutorial. No jogo enquanto joga voce aprendera mais. Apenas tente varias coisas diferentes. O tutorial foi um pouco mais facil que os niveis normais: os ninhos nao foram malignos e voce era invencivel. Mas agora prepare-se para a luta. Boa sorte!
+A ultima arma e o laser. Pegue os PowerUps e teste. O bom dele e que pode atravessar inimigos com um tiro so. Voce pode mudar suas armas pressionando KEY_WAFFE_PREV ou KEY_WAFFE_CYCLE. Tente um pouco.
+Esse e o fim do tutorial. Segure KEY_SUMMARY para ver o que já coletou e o que falta. Consultar o resumo é opcional. No jogo enquanto joga voce aprendera mais. Apenas tente varias coisas diferentes. O tutorial foi um pouco mais facil que os niveis normais: os ninhos nao foram malignos e voce era invencivel. Mas agora prepare-se para a luta. Boa sorte!
 36
 37
 38
@@ -86,52 +86,52 @@ Codigo destravado:
 - Pressione qualquer tecla -
 //---------- Menu Principal ----------//
 CARREGANDO
-CARREGANDO JOGO
+SALVAR JOGO
 INICIAR JOGO
-VOLTAR AO JOGO
-PREFERENCIAS
+RETOMAR JOGO
+PREFERÊNCIAS
 RECORDES
-CREDITOS
+CRÉDITOS
 SAIR
-JOGAR TUTORIAL
-COMECAR JOGO NOVO
-CONTINUAR JOGO SALVO
-FACIL
+JOGAR O TUTORIAL
+NOVO JOGO
+CARREGAR JOGO
+FÁCIL
 NORMAL
-DIFICIL
+DIFÍCIL
 HURRICAN
 cursor: selecionar - enter : escolhe - ESC : volta
-RANK
+POSIÇÃO
 NOME
-PONTUACAO
-STAGIO
-HABILIDADE
+PONTOS
+FASE
+DIF.
 VOLUME
 SOM
-MUSICA
+MÚSICA
 CONFIGURAR CONTROLES
-ESCOLHA IDIOMA
+ESCOLHER IDIOMA
 MODO:
 Force feedback
 Usar padroes
 Controle
 Joystick
-INACREDITAVEL
-NOVO RECORDE NO RANK
-ENTRE SEU NOME
-CONTINUE
-Zurück
-andar esquerda
-andar direita
+INACREDITÁVEL
+NOVO RECORDE NA POSIÇÃO
+DIGITE SEU NOME
+CONTINUAR
+Voltar
+andar à esquerda
+andar à direita
 agachar
-olhar cima
-olhar baixo
-pulo
-tiro
-activar raio
-powerline
+olhar para cima
+olhar para baixo
+pular
+atirar
+ativar o raio
+linha de energia
 granada
-shockwave
+onda de choque
 ciclo armas
 andar
 olhar
@@ -139,10 +139,10 @@ X/Y Achse
 D-pad
 -pressione nova tecla-
 -pressione novo botao-
-DETALHES: BAIXO
-DETALHES: MEDIO
-DETALHES: ALTO
-DETALHES: MAXIMO
+DETALHES: BAIXOS
+DETALHES: MÉDIOS
+DETALHES: ALTOS
+DETALHES: MÁXIMOS
 UM JOGADOR
 DOIS JOGADORES
 Jogador um
@@ -151,17 +151,17 @@ tipo
 modo
 Sensibilidade
 teclado
-nao definido
-estagio
+sem atribuição
+fase
 jogador
 data
-- sem registro -
+- vazio -
 SEGREDO
 esquerda
 direita
 cima
 baixo
-botao
+botão
 //---------- Dicas ----------//
 Se voce coletar todos os diamantes em um nivel, voce ira destravar um codigo.
 Quando perder uma vida, ira perder somente o nivel da arma que estava usando no momento.

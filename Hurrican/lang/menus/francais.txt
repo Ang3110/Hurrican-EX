@@ -1,0 +1,290 @@
+DISPLAY=AFFICHAGE
+WINDOW MODE=MODE D'AFFICHAGE
+WIDESCREEN=FORMAT D'IMAGE
+SPLITSCREEN TYPE=ÉCRAN PARTAGÉ
+RESOLUTION=RÉSOLUTION
+VSYNC=SYNCHRO VERTICALE
+TEXTURE FILTERING=FILTRAGE DES TEXTURES
+CRT FILTER=FILTRE CRT
+BRIGHTNESS=LUMINOSITÉ
+APPLY=APPLIQUER
+AUTO=AUTO
+STRETCHED 4:3=4:3 ÉTIRÉ
+DESKTOP=BUREAU
+DEFAULT=PAR DÉFAUT
+FULLSCREEN=PLEIN ÉCRAN
+WINDOWED=FENÊTRÉ
+DYNAMIC=DYNAMIQUE
+ONE SCREEN=ÉCRAN UNIQUE
+ON=ACTIVÉ
+OFF=DÉSACTIVÉ
+UNAVAILABLE=INDISPONIBLE
+YES=OUI
+NO=NON
+LOW=FAIBLE
+MEDIUM=MOYENNE
+HIGH=FORTE
+Display mode unavailable=Mode d'affichage indisponible
+Applied. Could not save settings.=Réglages appliqués. Échec de la sauvegarde.
+Display settings saved=Réglages d'affichage enregistrés
+Some settings apply on level load or restart.=Certains réglages s'appliquent au prochain niveau ou redémarrage.
+VSync unavailable on this driver=Ce pilote ne permet pas la synchro verticale
+Saved. VSync unavailable on this driver.=Enregistré. Ce pilote ne permet pas la synchro verticale.
+Reset controls=Rétablir les commandes
+Player=Joueur
+Rumble=Vibration
+Reset=Rétablir
+Pad=Manette
+disconnected=déconnectée
+Press input...=Appuyez sur une touche...
+Crouch and Look Down need separate inputs=S'accroupir et regarder en bas nécessitent deux commandes distinctes
+look left (COOP)=regarder à gauche (COOP)
+look right (COOP)=regarder à droite (COOP)
+summary board=tableau de collecte
+cycle weapons left=arme précédente
+cycle weapons right=arme suivante
+select spread=choisir le tir dispersé
+select laser=choisir le laser
+select bounce=choisir le ricochet
+key nav=[Flèches]
+pad nav=(croix / stick)
+key sides=[Gauche/Droite]
+pad sides=(Gauche/Droite)
+menu help={nav}    {ok} choisir    {back} retour
+binding help={nav} : joueur    {ok} : attribuer    {del} : retirer
+cancel binding={back} : annuler
+!!! CHEATER !!!=!!! TRICHEUR !!!
+WAITING FOR P1=EN ATTENTE DE J1
+WAITING FOR P2=EN ATTENTE DE J2
+REGROUP TO CONTINUE=REGROUPEZ-VOUS POUR CONTINUER
+OpenGL and GCW Zero port by Pickle & Senquack=Portage OpenGL et GCW Zero par Pickle et Senquack
+Return=Entrée
+Escape=Échap
+Delete=Suppr
+Space=Espace
+Backspace=Retour arrière
+Left=Gauche
+Right=Droite
+Up=Haut
+Down=Bas
+D-pad=Croix
+Left Ctrl=Ctrl gauche
+Right Ctrl=Ctrl droit
+Left Shift=Maj gauche
+Right Shift=Maj droite
+PageUp=Page préc.
+PageDown=Page suiv.
+LS click=Clic stick G
+RS click=Clic stick D
+english.lng=English
+deutsch.lng=Deutsch
+francais.lng=Français
+espanol.lng=Español
+italiano.lng=Italiano
+polski.lng=Polski
+portugues.lng=Português
+svenska.lng=Svenska
+D-pad Left=Croix Gauche
+D-pad Right=Croix Droite
+D-pad Up=Croix Haut
+D-pad Down=Croix Bas
+D-pad Up-Left=Croix Haut-Gauche
+D-pad Up-Right=Croix Haut-Droite
+D-pad Down-Left=Croix Bas-Gauche
+D-pad Down-Right=Croix Bas-Droite
+LS Left=LS Gauche
+LS Right=LS Droite
+LS Up=LS Haut
+LS Down=LS Bas
+LS Up-Left=LS Haut-Gauche
+LS Up-Right=LS Haut-Droite
+LS Down-Left=LS Bas-Gauche
+LS Down-Right=LS Bas-Droite
+RS Left=RS Gauche
+RS Right=RS Droite
+RS Up=RS Haut
+RS Down=RS Bas
+RS Up-Left=RS Haut-Gauche
+RS Up-Right=RS Haut-Droite
+RS Down-Left=RS Bas-Gauche
+RS Down-Right=RS Bas-Droite
+D-pad/LS Left=Croix/LS Gauche
+D-pad/LS Right=Croix/LS Droite
+D-pad/LS Up=Croix/LS Haut
+D-pad/LS Down=Croix/LS Bas
+D-pad/LS Up-Left=Croix/LS Haut-Gauche
+D-pad/LS Up-Right=Croix/LS Haut-Droite
+D-pad/LS Down-Left=Croix/LS Bas-Gauche
+D-pad/LS Down-Right=Croix/LS Bas-Droite
+[credits]
+- Hurrican -
+
+(c) 2007
+poke53280
+
+Jörg 'Eiswuxe' Winterstein
+
+Programmation
+Conception du jeu
+Son et musique
+Conception des niveaux
+
+Thomas 'Turri' Schreiter
+
+Graphismes
+Conception du jeu
+Conception des ennemis
+Conception des niveaux
+
+Un grand merci à
+
+T.R.Schmidt et Gerhard 'ScHlAuChi' Weihrauch pour leur travail sur les niveaux et leurs nombreuses idées pour améliorer le jeu.
+
+Merci aussi à nos infatigables bêta-testeurs
+
+Wenkman, responsable des tests
+Gereon 'ntroPi' Bartel
+Kai 'Flanderz' Schmiegelt
+Michael 'Ram-Brand' Dahms
+Carsten 'Jazzoid' Przyluczky
+Heiko 'TheWanderer' Kalista
+Matthias 'KingKiKapu' Klocke
+Manuel 'Heimdall' Rülke
+Friedrich 'BadData' Volmering
+Christian 'Gryphon' Kleinsteinberg
+Marc 'Dawn2069MS' Schmitt
+
+Un immense merci à nos fans. Pendant des années, vous nous avez encouragés et avez cru en nous. Merci de ne jamais avoir abandonné Hurrican. Ce jeu est pour vous !
+
+Eiswuxe salue
+
+Thorstein
+
+Jens
+
+Herbie et Edi
+
+Maroff et Anna
+
+Bumsmichl, avec Nina ET la soupe aux lentilles
+
+Jarlock
+
+Dan et Silke
+
+Sebastian et Doro
+
+L'inimitable Markus Gottschalk
+
+Michael 'Skyrider' Matzka
+
+Andi, Simone et Johannes
+
+Stef, Margot et Reinhard
+
+Dalama
+Manuel 'Heimdall' Rülke
+Lars Kranebitter
+
+Windigo-Design
+Friedrich 'BadData' Volmering
+Carsten 'Jazzoid' Przyluczky
+Andi, vieux farceur, cul sec !
+
+Michael 'Gargoyle' Kreft
+
+Martin Lassahn est peut-être le seul à comprendre notre parcours du combattant : il le vit aussi ! Tiens bon ;)
+
+Matthias Schindler, vieille traînée de la mort
+
+Marc Kamradt
+
+Peter Schraut
+
+Philipp Dortmann
+
+David Zaadstra
+
+Janosch Dalecke
+
+Florian Eisele
+
+Uwe Wegener avec Katrin et Vince ;)
+
+Le reste de la famille Zealkind
+
+Nils 'Steele' Gey
+
+Toute l'équipe de www.modarchive.com
+
+ChrisCrusher
+
+Alexander 'Jumperone' Krug et Softgames
+
+Sechsta Sinn : accrochez-vous... nous, on y est enfin arrivés ;)
+
+andUp
+
+Sans oublier Steffan Kummer, ce vieux célibataire endurci !
+
+Les Super Konrad Brothers bien sûr, ainsi que Dex, Bronko, RuvF, Aky, Contra-254 et tous les autres fans de Turrican !
+
+Pekaro Soft
+
+Steve Harris :)
+
+Impossible d'oublier le véritable maître. Un grand salut à Manne ! En cherchant bien, vous pourrez lui rendre hommage au fond de la jungle...
+
+Et bien sûr, le meilleur pour la fin... Ma petite Kathrin. Je t'aime ;)
+
+Et maintenant, place à Turri
+
+Coucou maman. Et voilà...
+
+...enfin, pas vraiment !
+
+Je salue
+
+Ma chérie, que j'aime plus que tout
+
+Mes frères Carsten et Dirki, cette vieille chiffe molle
+
+Salut à Wenkman, notre testeur acharné
+
+Tous les membres du forum qui nous ont proposé tant d'idées pour Hurrican et nous sont restés fidèles pendant plus de cinq ans.
+
+Mes camarades de Poke, Wanderer et Skyrider, et...
+
+Salut à Markus 'Snake', qui s'est toujours si bien occupé de notre site.
+
+Salut à Peer Draeger. Wit Wit Wit !
+
+Et mes autres collègues : Marc Schmidt, Christian Kleinsteinberg, Uwe Wegener, Tetjana Obly Wobly ;-)
+
+Salut Boris Triebel. Regarde, on l'a sorti ! Héhéhé.
+
+Marc Kamradt
+
+Salut Matthias, vieille traînée de la mort
+
+Et bien sûr Manfred Trenz, qui a enchanté ma jeunesse avec Turrican. Pour moi, il a toujours été le maître.
+
+Salut à tous ceux et celles qui lisent ceci en jouant à Hurrican. J'espère que vous vous amusez bien :-)
+
+Salut à Gigi et à son chat... et à Crazy aussi
+
+Salut à Adnan, ce vieux fêtard et bon ami
+
+Salut à tous ceux de rendering.de qui m'ont si souvent conseillé pour mes graphismes.
+
+Et salut à Krapfen
+
+Salut à Thorsten Mutschall et Tanja Köhler. J'espère que vous vous amuserez bien :-))
+Salut à Micha Black Raven et à ses âmes perdues.
+
+Salut à tout le GVC Gamevoiceclan. Le meilleur de tous... même si c'est fini aujourd'hui.
+
+Salut à Velociraptor
+
+Et salut à tous ceux que j'ai oubliés. Je suis sûr qu'il y en a quelques-uns :-)
+

@@ -1,5 +1,5 @@
 --------------------------------
->   Plik Jezykowy Hurrican     <
+>    Plik j…zykowy Hurrican    <
 >                              <
 >          - polski -          <
 >            Romano            <
@@ -63,8 +63,8 @@ Wow, ta fala uderzeniowa zniszczyla cala sciane, zabila robota kroczacego, a naw
 Jeszcze jedno cwiczenie celnosci... Przytrzymaj KEY_SHOOT i KEY_BLITZ jednoczesnie, by naladowac swoja bron promieniem. W czasie ladowania mozesz zmienic kierunek celowania przy pomocy KEY_LEFT i KEY_RIGHT. Pusc klawisze, by wystrzelic promien. Im dluzej bedziesz ladowal promien, tym wiekszy pocisk wystrzelisz. Stan na srodku i sprobuj zestrzelic w ten sposob diamenty nad toba.
 Im dluzszy masz piorun, tym szybciej naladujesz promien. Jeszcze jedno: idac w lewo dowiesz sie o dwoch innych podstawowych broniach, poza karabinem rozpryskowym.
 To byly bonusy kuli plazmowej. Jak widzisz, wzmocnienia moga nawet lezec ot tak sobie. Ten pocisk moze dzielic sie na dwa kolejne pociski, zaleznie od poziomu twojej broni. Bardzo przydatne w tunelach lub korytarzach jak ten tutaj.
-Ostatnia bronia na dzis jest laser. Zbierz wzmocnienia i przetestuj go. Jego specjalna wlasciwoscia jest to ze potrafi przeszywac kilku wrogow jednym pociskiem. Mozesz zmieniac bronie za pomoca KEY_WAFFE_CYCLE. Pobaw sie troche.
-To koniec treningu. W grze dowiesz sie wiecej o wzmocnieniach i innych rzeczach. Tylko zapamietaj sobie, poeksperymentuj troche ze wszystkim by to zrozumiec. Ten trening byl nieco latwiejszy niz normalne poziomy: gniazda nie tworzyly wrogow a ty byles niezniszczalny. Ale teraz powinienes byc gotowy do walki. Powodzenia!
+Ostatnia bronia na dzis jest laser. Zbierz wzmocnienia i przetestuj go. Jego specjalna wlasciwoscia jest to ze potrafi przeszywac kilku wrogow jednym pociskiem. Mozesz zmieniac bronie za pomoca KEY_WAFFE_PREV lub KEY_WAFFE_CYCLE. Pobaw sie troche.
+To koniec treningu. Przytrzymaj KEY_SUMMARY, aby zobaczyƒ, co uda‡o ci si… zebraƒ i czego jeszcze brakuje. Podgld jest opcjonalny. W grze dowiesz sie wiecej o wzmocnieniach i innych rzeczach. Tylko zapamietaj sobie, poeksperymentuj troche ze wszystkim by to zrozumiec. Ten trening byl nieco latwiejszy niz normalne poziomy: gniazda nie tworzyly wrogow a ty byles niezniszczalny. Ale teraz powinienes byc gotowy do walki. Powodzenia!
 36
 37
 38
@@ -85,50 +85,50 @@ Sekrety
 Odblokowane cheaty:
 - Wcisnij dowolny klawisz -
 //---------- Main Menu ----------//
-LADOWANIE
-ZAPISZ GRE
-ZACZNIJ GRE
-POWROT DO GRY
-OPCJE
-HALA SLAWY
-LISTA PLAC
-WYJDZ
-ROZPOCZNIJ TRENING
-ROZPOCZNIJ NOWA GRE
-KONTYNUUJ GRE
-LATWY
+WCZYTYWANIE
+ZAPISZ GR„
+ROZPOCZNIJ GR„
+WZNÓW GR„
+USTAWIENIA
+NAJLEPSZE WYNIKI
+TWÓRCY GRY
+ZAKOˆCZ
+ZAGRA‚ W SAMOUCZEK
+NOWA GRA
+WCZYTAJ GR„
+†ATWY
 NORMALNY
 TRUDNY
 HURRICAN
 kursor : wybierz - enter : zatwierdz - ESC : cofnij
-RANGA
-IMIE
-WYNIK
-POZ.
-UMIEJ.
+MIEJSCE
+NAZWA
+PUNKTY
+POZIOM
+TRYB
 GLOSNOSC
-DZWIEK
+DŒWI„K
 MUZYKA
-KONFIGURUJ STEROWANIE
-WYBIERZ JEZYK
+KONFIGURACJA STEROWANIA
+WYBIERZ J„ZYK
 TRYB:
 Wibracja
 Ustawienia poczatkowe
 Joypad
 Joystick
 NIESAMOWITE
-NOWY WYNIK W RANDZE
-WPISZ SWOJE IMIE
-KONTYNUUJ
-Zurück
-idz w lewo
-idz w prawo
-klecz
-patrz w gore
-patrz w dol
+NOWY REKORD NA MIEJSCU
+WPISZ SWOJE IMI„
+DALEJ
+Powrót
+id w lewo
+id w prawo
+kucnij
+patrz w gór…
+patrz w dó‡
 skocz
-strzel
-aktywuj piorun
+strzelaj
+w‡cz piorun
 linia mocy
 granat
 fala uderzeniowa
@@ -140,22 +140,22 @@ D-pad
 -wcisnij klawisz-
 -wcisnij przycisk-
 DETALE: NISKIE
-DETALE: SREDNIE
+DETALE: ŠREDNIE
 DETALE: WYSOKIE
-DETALE: NAJWYZSZE
+DETALE: NAJWYŽSZE
 JEDEN GRACZ
-DWOCH GRACZY
-Pierwszy gracz
-Drugi gracz
+DWÓCH GRACZY
+Gracz pierwszy
+Gracz drugi
 typ
 tryb
 Czulosc
 klawiatura
-nie zdefiniowano
+brak przypisania
 poziom
 gracze
 data
-- brak wpisu -
+- puste -
 SEKRET
 lewo
 prawo

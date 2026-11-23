@@ -1,5 +1,5 @@
 --------------------------------
->   Hurrican Language File     <
+>      Idioma de Hurrican      <
 >                              <
 >         - Espanol -          <
 >           Hal9000            <
@@ -63,8 +63,8 @@ Wow, esa onda de choque destruyo el muro, elimino al walker e incluso vacio un b
 Un ejercicio de punteria mas... Manten pulsado KEY_SHOOT y KEY_BLITZ a la vez para cargar tu arma. Mientras se carga, puedes cambiar la direccion con KEY_LEFT o KEY_RIGHT. Deja de pulsar las teclas para liberar el impulso. Cuanto mas tiempo tengas cargando el disparo, mas grande sera. Ve hacia el medio de los diamantes e intenta dispararlos encima de ti con el impulso.
 Cuanto mas largo sea tu rayo, mas rapido se cargara el impulso. Una cosa mas: a la izquierda tienes las otras dos armas primarias del juego aparte del disparo multiple.
 Estos son powerups del disparo de rebote. Como has comprobado, los powerups pueden encontrarse incluso de esta forma. Este disparo puede dividirse en dos mas menudos segun como sea su nivel de potencia. Muy util en tuneles estrechos y pasillos como este de aqui.
-La ultima arma de hoy es el laser. Recoge los powerups y pruebala. Su caracteristica especial es que puede atravesar varios enemigos de un solo disparo. Puedes cambiar tu arma pulsando KEY_WAFFE_CYCLE. Practica un poco con ello.
-Aqui termina el tutorial. En el juego aprenderas mas sobre los powerups y otras cosas. Recuerda: experimenta un poco con todo para entenderlo. El tutorial es un poco mas facil que el resto del juego pues los nidos no lanzaban enemigos y eras invulnerable. A partir de ahora deberas estar preparado para la batalla. ¡Buena suerte!
+La ultima arma de hoy es el laser. Recoge los powerups y pruebala. Su caracteristica especial es que puede atravesar varios enemigos de un solo disparo. Puedes cambiar tu arma pulsando KEY_WAFFE_PREV o KEY_WAFFE_CYCLE. Practica un poco con ello.
+Aqui termina el tutorial. Mantén KEY_SUMMARY para ver lo que has recogido y lo que te falta. Consultar el resumen es opcional. En el juego aprenderas mas sobre los powerups y otras cosas. Recuerda: experimenta un poco con todo para entenderlo. El tutorial es un poco mas facil que el resto del juego pues los nidos no lanzaban enemigos y eras invulnerable. A partir de ahora deberas estar preparado para la batalla. ¡Buena suerte!
 36
 37
 38
@@ -87,49 +87,49 @@ Trucos desbloqueados:
 //---------- Main Menu ----------//
 CARGANDO
 GUARDAR PARTIDA
-NUEVA PARTIDA
-VOLVER A LA PARTIDA
-OPCIONES
-MEJORES PUNTUACIONES
-CREDITOS
-SALIR DEL JUEGO
+INICIAR PARTIDA
+REANUDAR PARTIDA
+PREFERENCIAS
+RÉCORDS
+CRÉDITOS
+SALIR
 JUGAR EL TUTORIAL
-EMPEZAR NUEVA PARTIDA
-CONTINUAR PARTIDA GUARDADA
-FACIL
+NUEVA PARTIDA
+CARGAR PARTIDA
+FÁCIL
 NORMAL
-DIFICIL
+DIFÍCIL
 HURRICAN
 cursor: seleccionar - enter : eleccion - ESC : volver
-POSICION
+PUESTO
 NOMBRE
-PUNTUACION
-FASE
-DIFIC.
+PUNTOS
+NIVEL
+DIF.
 VOLUMEN
 SONIDO
-MUSICA
+MÚSICA
 CONFIGURAR CONTROLES
-SELECCIONAR IDIOMA
+ELEGIR IDIOMA
 MODO:
 Force feedback
 Configuracion predeterminada
 Joypad
 Joystick
-INCREIBLE
-NUEVA PUNTUACION EN EL RANKING
+INCREÍBLE
+NUEVO RÉCORD EN EL PUESTO
 INTRODUCE TU NOMBRE
 CONTINUAR
 Volver
-izquierda
-derecha
+caminar a la izquierda
+caminar a la derecha
 agacharse
 mirar arriba
 mirar abajo
 saltar
 disparar
-activar rayo
-rafaga de energia
+activar el rayo
+línea de energía
 granada
 onda de choque
 cambiar arma
@@ -139,10 +139,10 @@ Eje X/Y
 D-pad
 -pulsa nueva tecla-
 -press nuevo boton-
-DETALLES: BAJO
-DETALLE: MEDIO
-DETALLE: ALTO
-DETALLE: MAXIMO
+DETALLES: BAJOS
+DETALLES: MEDIOS
+DETALLES: ALTOS
+DETALLES: MÁXIMOS
 UN JUGADOR
 DOS JUGADORES
 Jugador uno
@@ -152,16 +152,16 @@ modo
 Sensibilidad
 teclado
 sin asignar
-fase
+nivel
 jugador
 fecha
-- vacio -
+- vacío -
 SECRETO
 izquierda
 derecha
 arriba
 abajo
-boton
+botón
 //---------- Hints ----------//
 Si recoges todos los diamantes de un nivel, desbloquearas un truco.
 Cuando pierdas una vida, perderas un nivel de potencia del arma que tengas seleccionada.

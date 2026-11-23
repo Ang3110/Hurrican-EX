@@ -1,5 +1,5 @@
 --------------------------------
->   Hurrican Language File     <
+>  File di lingua di Hurrican  <
 >                              <
 >         - italiano -         <
 >         Luca Longone         <
@@ -63,8 +63,8 @@ Wow, quell'onda-shock ha distrutto l'intero muro eliminando il walker, e ha anch
 Un'altro esercizio di puntamento... Tieni premuto KEY_SHOOT e KEY_BLITZ simultaneamente per caricare la tua arma con il colpo. Durante il caricamento, puoi cambiare la direzione di puntamento con KEY_LEFT e KEY_RIGHT. Lascia i tasti per sparare il colpo. Piu' a lungo mantieni il colpo, piu' sara' grande. Vai al centro e prova a sparare ai diamanti sopra di te con questo colpo.
 Piu' e' lungo il tuo fulmine, piu' velocemente si carichera' il colpo. Un'altra cosa: a sinistra scoprirai le due armi principali che si trovano a fianco allo spread shot.
 Questi erano gli extra per i bounce. Come puoi vedere, i power up possono trovarsi anche in giro cosi'. Questo sparo si puo' dividere in altri due spari in base al potere della tua arma al momento. Molto utile nei tunnel stretti o in corridoi come questo qui.
-L'ultima arma di oggi e' il laser. Colleziona i power up e provalo. La sua particolarita' sta' nel fatto di poter sparare attraverso molti nemici con un colpo solo. Puoi cambiare arma con KEY_WAFFE_CYCLE. Fai un po' di pratica.
-Questa e' la fine del tutorial. Nel gioco incontrerai altri power up e altra roba. Tieni pero' a mente: sperimenta un po' tutto per capire. Il tutorial era un po' piu' facile dei normali livelli: dai nidi non spuntavano nemici ed eri invincibile. Ma ora dovresti essere pronto alla battaglia. Buona fortuna!
+L'ultima arma di oggi e' il laser. Colleziona i power up e provalo. La sua particolarita' sta' nel fatto di poter sparare attraverso molti nemici con un colpo solo. Puoi cambiare arma con KEY_WAFFE_PREV o KEY_WAFFE_CYCLE. Fai un po' di pratica.
+Questa e' la fine del tutorial. Tieni premuto KEY_SUMMARY per vedere cosa hai raccolto e cosa ti manca. Consultare il riepilogo è facoltativo. Nel gioco incontrerai altri power up e altra roba. Tieni pero' a mente: sperimenta un po' tutto per capire. Il tutorial era un po' piu' facile dei normali livelli: dai nidi non spuntavano nemici ed eri invincibile. Ma ora dovresti essere pronto alla battaglia. Buona fortuna!
 36
 37
 38
@@ -86,16 +86,16 @@ Trucco sbloccato:
 - Premi un tasto -
 //---------- Main Menu ----------//
 CARICAMENTO
-SALVA GIOCO
-INIZIA GIOCO
-TORNA AL GIOCO
+SALVA PARTITA
+AVVIA PARTITA
+RIPRENDI PARTITA
 PREFERENZE
-HIGHSCORE
-CREDITI
+CLASSIFICA
+RICONOSCIMENTI
 ESCI
-GIOCA TUTORIAL
-INIZIA NUOVO GIOCO
-CONTINUA GIOCO SALVATO
+GIOCA AL TUTORIAL
+NUOVA PARTITA
+CARICA PARTITA
 FACILE
 NORMALE
 DIFFICILE
@@ -103,35 +103,35 @@ HURRICAN
 cursori: selezionare - enter : scegliere - ESC : indietro
 POSIZIONE
 NOME
-PUNTEGGIO
-STAGE
+PUNTI
+LIVELLO
 DIFF.
 VOLUME
 SUONO
 MUSICA
-CONFIGURA CONTROLLI
-SCEGLI LINGUA
+CONFIGURA COMANDI
+SCEGLI LA LINGUA
 MODO:
 Force feedback
 Carica impostazioni predefinite
 Joypad
 Joystick
 INCREDIBILE
-NUOVO HIGHSCORE ALLA POSIZIONE
-INSERISCI IL NOME
+NUOVO RECORD AL POSTO
+INSERISCI IL TUO NOME
 CONTINUA
-dietro
+Indietro
 cammina a sinistra
 cammina a destra
-accovacciati
-guarda su'
-guarda giu'
+abbassati
+guarda in alto
+guarda in basso
 salta
 spara
-attiva lampo
-power line
+attiva il fulmine
+linea di energia
 granata
-onda-shock
+onda d'urto
 cambia arma
 cammina
 guarda
@@ -139,10 +139,10 @@ Asse X/Y
 D-pad
 -premi nuovo tasto-
 -premi nuovo bottone-
-DETTAGLIO: BASSO
-DETTAGLIO: MEDIO
-DETTAGLIO: ALTO
-DETTAGLIO: MASSIMO
+DETTAGLI: BASSI
+DETTAGLI: MEDI
+DETTAGLI: ALTI
+DETTAGLI: MASSIMI
 UN GIOCATORE
 DUE GIOCATORI
 Giocatore uno
@@ -151,17 +151,17 @@ tipo
 modo
 sensibilita'
 tastiera
-non definito
-stage
+non assegnato
+livello
 giocatore
 data
-- nessun valore -
+- vuoto -
 SEGRETO
 sinistra
 destra
 su'
 giu'
-bottone
+pulsante
 //---------- Hints ----------//
 Collezionando tutti i diamanti di un livello, sbloccherai un codice per un trucco.
 Perdendo una vita perderai anche il livello dell'arma corrente.

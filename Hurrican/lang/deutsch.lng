@@ -1,5 +1,5 @@
 --------------------------------
->     Hurrican Sprach File     <
+>     Hurrican-Sprachdatei     <
 >                              <
 >          - deutsch -         <
 >           Poke53280          <
@@ -63,8 +63,8 @@ Wow, die Schockwelle hat die ganze Wand weggesprengt, den Walker plattgemacht, u
 Zielübung, die Zweite... Halte KEY_SHOOT und KEY_BLITZ gedrückt, um deine Waffe mit einem Beam aufzuladen. Währenddessen kannst du mit KEY_LEFT und KEY_RIGHT deine Waffe ausrichten. Lasse die beiden Tasten los, um den Beam abzuschiessen. Je länger du auflädst, desto stärker ist auch der Beam. Geh in die Mitte und schieß' wieder die Diamanten über dir frei.
 Je länger dein Blitz ist, desto schneller lädt sich übrigens der Beam auf. Eine Kleinigkeit gibt es allerdings noch. Ein Stück weiter links lernst du noch die zwei anderen primären Waffensysteme kennen, die es neben dem Streuschuß noch gibt.
 Das eben waren die Extras für den Bounce Schuss. Wie du siehst, liegen sie manchmal auch einfach so rum. Dieser Schuss teilt sich in den höheren Stufen nach einem Treffer in zwei kleinere Kugeln auf, die an der Wand abprallen. Sehr effektiv in engen Gängen, so wie diesem hier.
-So, die letzte Waffe für heute: Der Laser. Sammle die PowerUps auf und teste ihn aus. Seine Besonderheit ist es, dass er durch mehrere Gegner durchfliegt. Die Waffen kannst du übrigens mit KEY_WAFFE_CYCLE durchwechseln. Probier es mal aus.
-Das hier ist das Ende des Tutorials. Du wirst im Spiel sicher noch auf ein paar unbekannte PowerUps und andere Sachen stoßen. Dort gilt dann: Experimentiere ein bisschen, um herauszufinden, wie diese Dinge funktionieren. Das Tutorial-Level war ein wenig einfacher als das "echte" Leben. Du warst unverwundbar, und aus den Wespennestern sind auch keine Wespen geschlüpft. Aber jetzt solltest du einigermaßen gut auf dein Abenteuer vorbereitet sein. Also auf in den Kampf ;)
+So, die letzte Waffe für heute: Der Laser. Sammle die PowerUps auf und teste ihn aus. Seine Besonderheit ist es, dass er durch mehrere Gegner durchfliegt. Die Waffen kannst du übrigens mit KEY_WAFFE_PREV oder KEY_WAFFE_CYCLE durchwechseln. Probier es mal aus.
+Das hier ist das Ende des Tutorials. Halte KEY_SUMMARY gedrückt, um zu sehen, was du gesammelt hast und was dir noch fehlt. Die Übersicht ist freiwillig. Du wirst im Spiel sicher noch auf ein paar unbekannte PowerUps und andere Sachen stoßen. Dort gilt dann: Experimentiere ein bisschen, um herauszufinden, wie diese Dinge funktionieren. Das Tutorial-Level war ein wenig einfacher als das "echte" Leben. Du warst unverwundbar, und aus den Wespennestern sind auch keine Wespen geschlüpft. Aber jetzt solltest du einigermaßen gut auf dein Abenteuer vorbereitet sein. Also auf in den Kampf ;)
 36
 37
 38
@@ -85,49 +85,49 @@ Verstecke
 Cheat freigespielt:
 - Taste drücken -
 //---------- Main Menu ----------//
-LADE
+LADEN
 SPIEL SPEICHERN
 SPIEL STARTEN
-ZURUECK ZUM SPIEL
+SPIEL FORTSETZEN
 EINSTELLUNGEN
-HIGHSCORES
-CREDITS
-ENDE
+BESTENLISTE
+MITWIRKENDE
+BEENDEN
 TUTORIAL SPIELEN
-NEUES SPIEL STARTEN
-ALTES SPIEL FORTSETZEN
+NEUES SPIEL
+SPIEL LADEN
 LEICHT
-MITTEL
+NORMAL
 SCHWER
 HURRICAN
 Cursor : Auswählen - Enter : Bestätigen - ESC : Zurück
-PLATZ
+RANG
 NAME
 PUNKTE
-STAGE
-SKILL
+LEVEL
+STUFE
 LAUTSTAERKE
 SOUND
 MUSIK
-STEUERUNG KONFIGURIEREN
-SPRACHE WAEHLEN
+STEUERUNG BELEGEN
+SPRACHE WÄHLEN
 MODUS:
 Force feedback
 Standardeinstellungen laden
 Joypad
 Joystick
-WAHNSINN
-NEUE HIGHSCORE AUF PLATZ
-GIB DEINEN NAMEN EIN
+UNGLAUBLICH
+NEUER REKORD AUF PLATZ
+NAMEN EINGEBEN
 WEITER
 Zurück
-Links laufen
-Rechts laufen
-Ducken
-Nach oben schauen
-Nach unten schauen
-Springen
-Schießen
+nach links gehen
+nach rechts gehen
+ducken
+nach oben schauen
+nach unten schauen
+springen
+schießen
 Blitz aktivieren
 Powerline
 Granate
@@ -140,9 +140,9 @@ Steuerkreuz
 -Neue Taste drücken-
 -Neuen Button drücken-
 DETAILS: NIEDRIG
-DETAILS: MEDIUM
+DETAILS: MITTEL
 DETAILS: HOCH
-DETAILS: MAXIMUM
+DETAILS: MAXIMAL
 EIN SPIELER
 ZWEI SPIELER
 Spieler eins
@@ -151,17 +151,17 @@ Typ
 Modus
 Empfindlichkeit
 Tastatur
-Nicht definiert
-Stage
+unbelegt
+Level
 Spieler
 Datum
-- kein Eintrag -
+- leer -
 SECRET
 Links
 Rechts
 Oben
 Unten
-Button
+Taste
 //---------- Hints ----------//
 Wenn du alle Diamanten in einem Level findest, wirst du mit einem Cheat-Code belohnt.
 Verlierst du ein Leben, so wird auch die aktuell gewählte Waffe um eine Stufe schwächer.
