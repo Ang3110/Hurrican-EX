@@ -15,14 +15,53 @@
 // Defines
 // --------------------------------------------------------------------------------------
 
-constexpr int MAX_JOYSTICKBUTTONS = 128;
+constexpr int MAX_RAW_JOYSTICKBUTTONS = 128;
+constexpr int CONTROLLER_BUTTON_BASE = MAX_RAW_JOYSTICKBUTTONS;
+constexpr int CONTROLLER_LT = CONTROLLER_BUTTON_BASE + 32;
+constexpr int CONTROLLER_RT = CONTROLLER_LT + 1;
+constexpr int MAX_JOYSTICKBUTTONS = CONTROLLER_RT + 1;
+constexpr int JoystickDeadzone = 500;
+
+enum class PadDirection { Left, Right, Down, Up, Count };
+enum class PadDirectionSource { DPad, LeftStick, RightStick, Count };
+enum class RumbleStrength { Off, Low, Medium, High, Count };
+enum class PlayStationSymbol { None, Cross, Circle, Square, Triangle };
+
+constexpr int PadDirectionBinding(PadDirectionSource source, PadDirection direction) {
+    return MAX_JOYSTICKBUTTONS + static_cast<int>(source) * static_cast<int>(PadDirection::Count) + static_cast<int>(direction);
+}
+
+// Existing profiles can use D-pad or stick Up as a single Jump binding.
+constexpr int PadAutomaticUpBinding = PadDirectionBinding(PadDirectionSource::Count, PadDirection::Left);
+
+constexpr int AutomaticPadBinding(PadDirection direction) {
+    return direction == PadDirection::Up ? PadAutomaticUpBinding : PadAutomaticUpBinding + 1 + static_cast<int>(direction);
+}
+
+// Append the diagonals after all historical button and direction codes.
+enum class PadDiagonal { UpLeft, UpRight, DownLeft, DownRight, Count };
+constexpr int FirstPadDiagonal = AutomaticPadBinding(PadDirection::Down) + 1;
+constexpr int PadDiagonalBinding(PadDirectionSource source, PadDiagonal direction) {
+    return FirstPadDiagonal + static_cast<int>(source) * 4 + static_cast<int>(direction);
+}
+constexpr int LastPadBinding = PadDiagonalBinding(PadDirectionSource::RightStick, PadDiagonal::DownRight);
+constexpr bool IsPadDirectionBinding(int binding) {
+    return binding >= MAX_JOYSTICKBUTTONS && binding <= LastPadBinding;
+}
 
 // --------------------------------------------------------------------------------------
 // Include Dateien
 // --------------------------------------------------------------------------------------
 
 #include "SDL_port.hpp"
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+#  include <SDL_gamecontroller.h>
+constexpr int ControllerButton(SDL_GameControllerButton button) {
+    return CONTROLLER_BUTTON_BASE + button;
+}
+#endif
 
+#include <array>
 #include <bitset>
 #include <string>
 
@@ -34,41 +73,35 @@ constexpr int MAX_JOYSTICKBUTTONS = 128;
 // Joystick Klasse
 // --------------------------------------------------------------------------------------
 
+enum class MenuPadButton { Select, Back, Remove, Pause };
+
 class DirectJoystickClass {
   private:
     LPDIRECTINPUTDEVICE8 lpDIJoystick;  // Joystick Device Interface
 
-    int startButton;
-    int enterButton;
-    int backButton;
-    int deleteButton;
-
-    int lt;
-    int rt;
-
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    SDL_GameController *controller = nullptr;
+    SDL_JoystickID instance = -1;
+#endif
     int NumButtons;                             // How many buttons joystick supports
-    int TotalButtons;                           // How many buttons joystick supports including triggers
     int NumAxis;                                // How many axis joystick supports
     int NumHats;                                // How many hats joystick supports
 
     bool CanForceFeedback;
+    std::array<Uint8, static_cast<int>(PadDirectionSource::Count)> directions{};
 
   public:
     bool Active;
     int JoystickX;                              // Joystick x-Koordinaten
     int JoystickY;                              // Joystick y-Koordinaten
-    int JoystickX2;                             // Joystick x-Koordinaten 2. analog Stick
-    int JoystickY2;                             // Joystick y-Koordinaten 2. analog Stick
     int JoystickPOV;                            // POV (für coolie hat)
-    int JoystickMode;                           // Joypad oder Stickmode
-    std::bitset<MAX_JOYSTICKBUTTONS> JoystickButtons;  // Feuerknopf gedrückt?
     std::string JoystickName;                   // Joystick Produktname
 
     DirectJoystickClass();
     ~DirectJoystickClass();
 
-    void ForceFeedbackEffect(int nr);
-    void StopForceFeedbackEffect(int nr);
+    void ForceFeedbackEffect(int nr, RumbleStrength strength, float intensity = 1.0f) const;
+    void StopForceFeedbackEffect(int nr) const;
 
     bool Init(int joy);
 
@@ -76,12 +109,26 @@ class DirectJoystickClass {
 
     bool Update();
 
-    int GetNumButtons() const { return TotalButtons; }
-
-    int GetMainMenuButton() const { return startButton; }
+    bool AnyButtonDown() const { return buttons.any(); }
+    bool ButtonPressed(int binding) const;
+    int PressedBinding() const;
+    int PressedDirection() const;
+    bool DirectionPressed(int binding) const;
+    bool AutomaticDirectionPressed(PadDirection direction) const;
+    static const char *DirectionName(int binding);
+    bool HasControllerMapping() const;
+    bool IsAttached() const;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    SDL_JoystickID Instance() const { return instance; }
+#endif
+    bool HasNintendoLayout() const;
+    bool HasPlayStationLayout() const;
+    PlayStationSymbol FaceButtonSymbol(int binding) const;
+    const char *BindingName(int binding) const;
 
     // DKS-Added these three for better joystick support, esp in menus
     // Returns true if button(s) serving as Enter key  are pressed (For menus)
+    int MenuBinding(MenuPadButton action) const;
     bool ButtonEnterPressed() const;
 
     // Returns true if button(s) serving as Escape key are pressed (For menus)
@@ -92,5 +139,8 @@ class DirectJoystickClass {
 
     // Returns true if button(s) serving as Start key are pressed (For game)
     bool ButtonStartPressed() const;
+
+  private:
+    std::bitset<MAX_JOYSTICKBUTTONS> buttons;
 };
 #endif

@@ -17,7 +17,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <iostream>
+#include <sstream>
 #include <string>
 namespace fs = std::filesystem;
 
@@ -34,7 +36,75 @@ extern Logdatei Protokoll;
 std::vector<std::string> LanguageFiles;
 std::string ActualLanguage;  // Gewählte Language
 char TextArray[TEXT::LASTTEXT][1024];
-char s_Replacers[MAX_AKTIONEN * 2][256];
+namespace {
+std::array<std::vector<TutorialWord>, TEXT::TUTORIAL39 - TEXT::TUTORIAL1 + 1> tutorialWords;
+}
+
+namespace {
+std::map<std::string, std::string> menuStrings;
+std::vector<std::string> paragraphs, creditRows;
+int wrapWidth = 0, wrapScale = 0;
+
+// Latin-1 plus sixteen otherwise unused atlas cells for Polish letters.
+std::string AtlasText(const std::string &utf8) {
+    constexpr char32_t polish[] = U"ĄąĆćĘęŁłŃńŚśŹźŻż";
+    std::string result;
+    for (size_t i = 0; i < utf8.size();) {
+        unsigned c = static_cast<unsigned char>(utf8[i++]);
+        if (c < 128) { result += static_cast<char>(c); continue; }
+        int rest = c < 224 ? 1 : c < 240 ? 2 : 3;
+        c &= (1u << (6 - rest)) - 1;
+        while (rest-- && i < utf8.size())
+            c = (c << 6) | (static_cast<unsigned char>(utf8[i++]) & 63);
+        const auto it = std::find(std::begin(polish), std::end(polish) - 1, c);
+        result += it != std::end(polish) - 1 ? static_cast<char>(128 + (it - polish)) :
+                  c <= 255 ? static_cast<char>(c) : '?';
+    }
+    return result;
+}
+
+void ReadMenuCatalog(const std::string &name) {
+    const auto path = fs::path(g_storage_ext) / "lang" / "menus" / (fs::path(name).stem().string() + ".txt");
+    std::ifstream file(path);
+    bool credits = false;
+    for (std::string line; std::getline(file, line);) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (!credits && line == "[credits]") {
+            credits = true;
+            paragraphs.clear();
+        } else if (credits) paragraphs.push_back(AtlasText(line));
+        else if (const auto cut = line.find('='); cut != std::string::npos)
+            menuStrings[line.substr(0, cut)] = AtlasText(line.substr(cut + 1));
+    }
+}
+}
+
+const char *MenuText(const char *key) {
+    const auto it = menuStrings.find(key);
+    return it != menuStrings.end() ? it->second.c_str() : key;
+}
+
+const std::vector<std::string> &CreditLines(int width) {
+    const int scale = pDefaultFont->GetScaleFactor();
+    if (width != wrapWidth || scale != wrapScale) {
+        creditRows.clear();
+        for (const auto &para : paragraphs) {
+            std::istringstream in(para);
+            std::string line;
+            for (std::string word; in >> word;) {
+                const auto next = line.empty() ? word : line + " " + word;
+                if (!line.empty() && pDefaultFont->StringLength(next.c_str(), 0) > width) {
+                    creditRows.push_back(line);
+                    line = word;
+                } else line = next;
+            }
+            creditRows.push_back(line);
+        }
+        wrapWidth = width;
+        wrapScale = scale;
+    }
+    return creditRows;
+}
 
 char Cheats[MAX_CHEATS][256] = {"$.345&&",            // 99 Extras = dnstuff
                                 ")$&!",               // Alle Waffen = idfa
@@ -87,23 +157,19 @@ loadfile:
 
     // Texte auslesen
     //
-    for (int i = 0; i < TEXT::LASTTEXT - 2; i++) {
-        strcpy_s(TextArray[i], 1, "");
-        int count = 0;
-        char c = Datei.get();
-
-        // Zeichen für Zeichen auslesen, bis ein c==10 gelesen wird. Dies markiert das Zeilenende
-        //
-        while (c != 10 && count < 1023) {
-            TextArray[i][count] = c;
-            c = Datei.get();
-            count++;
-        }
-
-        TextArray[i][count] = '\0';
+    for (int i = 0; i < TEXT::LASTTEXT; ++i) {
+        std::string row;
+        std::getline(Datei, row);
+        if (!row.empty() && row.back() == '\r') row.pop_back();
+        const auto n = row.copy(TextArray[i], sizeof(TextArray[i]) - 1);
+        TextArray[i][n] = 0;
     }
-
-    Datei.close();
+    menuStrings.clear();
+    paragraphs.clear();
+    wrapWidth = 0;
+    ReadMenuCatalog("english.lng");
+    if (filename != "english.lng") ReadMenuCatalog(filename);
+    InvalidateTutorialText();
 
     //
     // Stage Reihenfolge laden
@@ -272,103 +338,43 @@ void ReplaceAll(std::string &str, const std::string &from, const std::string &to
 // Tasten ErsetzungsStrings für die TutorialTexte initialisieren
 // --------------------------------------------------------------------------------------
 
-void InitReplacers() {
-    strcpy_s(s_Replacers[0], strlen("KEY_LEFT") + 1, "KEY_LEFT");
-    strcpy_s(s_Replacers[2], strlen("KEY_RIGHT") + 1, "KEY_RIGHT");
-    strcpy_s(s_Replacers[4], strlen("KEY_CROUCH") + 1, "KEY_CROUCH");
-    strcpy_s(s_Replacers[6], strlen("KEY_UP") + 1, "KEY_UP");
-    strcpy_s(s_Replacers[8], strlen("KEY_DOWN") + 1, "KEY_DOWN");
-    strcpy_s(s_Replacers[10], strlen("KEY_JUMP") + 1, "KEY_JUMP");
-    strcpy_s(s_Replacers[12], strlen("KEY_SHOOT") + 1, "KEY_SHOOT");
-    strcpy_s(s_Replacers[14], strlen("KEY_BLITZ") + 1, "KEY_BLITZ");
-    strcpy_s(s_Replacers[16], strlen("KEY_POWERLINE") + 1, "KEY_POWERLINE");
-    strcpy_s(s_Replacers[18], strlen("KEY_GRANATE") + 1, "KEY_GRANATE");
-    strcpy_s(s_Replacers[20], strlen("KEY_SHOCKWAVE") + 1, "KEY_SHOCKWAVE");
-    strcpy_s(s_Replacers[22], strlen("KEY_WAFFE_CYCLE") + 1, "KEY_WAFFE_CYCLE");
-    strcpy_s(s_Replacers[24], strlen("KEY_WAFFE_SPREAD") + 1, "KEY_WAFFE_SPREAD");
-    strcpy_s(s_Replacers[26], strlen("KEY_WAFFE_LASER") + 1, "KEY_WAFFE_LASER");
-    strcpy_s(s_Replacers[28], strlen("KEY_WAFFE_BOUNCE") + 1, "KEY_WAFFE_BOUNCE");
+void InvalidateTutorialText() {
+    for (auto &words : tutorialWords)
+        words.clear();
+}
 
-    // DKS - Uncommented the replacement text fillers below, the seem to work just fine,
-    //          despite having been labelled "TODO FIX"
-    // Personal TODO: customize for GCW Zero / display button 0 as button 1 and so forth
-    //                  on other devices
-    if (Player[0].ControlType == CONTROLTYPE_KEYBOARD) {
-        strcpy(s_Replacers[1], GetKeyName(Player[0].AktionKeyboard[AKTION_LINKS]));
-        strcpy(s_Replacers[3], GetKeyName(Player[0].AktionKeyboard[AKTION_RECHTS]));
-        strcpy(s_Replacers[5], GetKeyName(Player[0].AktionKeyboard[AKTION_DUCKEN]));
-        strcpy(s_Replacers[7], GetKeyName(Player[0].AktionKeyboard[AKTION_OBEN]));
-        strcpy(s_Replacers[9], GetKeyName(Player[0].AktionKeyboard[AKTION_UNTEN]));
-        strcpy(s_Replacers[11], GetKeyName(Player[0].AktionKeyboard[AKTION_JUMP]));
-        strcpy(s_Replacers[13], GetKeyName(Player[0].AktionKeyboard[AKTION_SHOOT]));
-        strcpy(s_Replacers[15], GetKeyName(Player[0].AktionKeyboard[AKTION_BLITZ]));
-        strcpy(s_Replacers[17], GetKeyName(Player[0].AktionKeyboard[AKTION_POWERLINE]));
-        strcpy(s_Replacers[19], GetKeyName(Player[0].AktionKeyboard[AKTION_GRANATE]));
-        strcpy(s_Replacers[21], GetKeyName(Player[0].AktionKeyboard[AKTION_SMARTBOMB]));
-        strcpy(s_Replacers[23], GetKeyName(Player[0].AktionKeyboard[AKTION_WAFFEN_CYCLE]));
-        strcpy(s_Replacers[25], GetKeyName(Player[0].AktionKeyboard[AKTION_WAFFE_SPREAD]));
-        strcpy(s_Replacers[27], GetKeyName(Player[0].AktionKeyboard[AKTION_WAFFE_LASER]));
-        strcpy(s_Replacers[29], GetKeyName(Player[0].AktionKeyboard[AKTION_WAFFE_BOUNCE]));
-    } else {
-        int joy_idx = Player[0].JoystickIndex;
-        std::string buf;
-        buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::LEFT]);
-        strcpy(s_Replacers[1], buf.c_str());
-
-        buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::RIGHT]);
-        strcpy(s_Replacers[3], buf.c_str());
-
-        buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::DOWN]);
-        strcpy(s_Replacers[5], buf.c_str());
-
-        buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::UP]);
-        strcpy(s_Replacers[7], buf.c_str());
-
-        buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::DOWN]);
-        strcpy(s_Replacers[9], buf.c_str());
-
-        if (Player[0].JoystickMode == JOYMODE_JOYSTICK)
-            buf.assign(TextArray[TEXT::JOYMODE_PAD + Player[0].JoystickMode - 1]).append(" ").append(TextArray[TEXT::UP]);
-        else
-            buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                      DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_JUMP]));
-
-        strcpy(s_Replacers[11], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_SHOOT]));
-        strcpy(s_Replacers[13], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_BLITZ]));
-        strcpy(s_Replacers[15], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_POWERLINE]));
-        strcpy(s_Replacers[17], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_GRANATE]));
-        strcpy(s_Replacers[19], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_SMARTBOMB]));
-        strcpy(s_Replacers[21], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_WAFFEN_CYCLE]));
-        strcpy(s_Replacers[23], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_WAFFE_SPREAD]));
-        strcpy(s_Replacers[25], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_WAFFE_LASER]));
-        strcpy(s_Replacers[27], buf.c_str());
-
-        buf.assign(TextArray[TEXT::BUTTON]).append(" ").append(
-                  DirectInput.MapButtonToString(joy_idx, Player[0].AktionJoystick[AKTION_WAFFE_BOUNCE]));
-        strcpy(s_Replacers[29], buf.c_str());
+const std::vector<TutorialWord> &TutorialWords(int lesson) {
+    auto &words = tutorialWords.at(lesson);
+    if (!words.empty())
+        return words;
+    constexpr const char *tokens[] = {"KEY_LEFT", "KEY_RIGHT", "KEY_CROUCH", "KEY_UP", "KEY_DOWN",
+        "KEY_JUMP", "KEY_SHOOT", "KEY_BLITZ", "KEY_POWERLINE", "KEY_GRANATE", "KEY_SHOCKWAVE",
+        "KEY_WAFFE_CYCLE", "KEY_WAFFE_SPREAD", "KEY_WAFFE_LASER", "KEY_WAFFE_BOUNCE", "KEY_WAFFE_PREV", "KEY_SUMMARY"};
+    static_assert(std::size(tokens) == ACTION_SUMMARY + 1);
+    std::istringstream source(TextArray[TEXT::TUTORIAL1 + lesson]);
+    for (std::string word; source >> word;) {
+        TutorialWord forms{word, word};
+        for (int p = 0; p < 2; ++p) {
+            const auto &player = Player[p];
+            const auto *pad = player.GetJoystick();
+            for (int action = 0; action <= ACTION_SUMMARY; ++action) {
+                if (word.find(tokens[action]) == std::string::npos)
+                    continue;
+                InputBinding selected{};
+                for (const auto binding : player.BindingsFor(pad)[action]) {
+                    if (binding.kind == (pad ? BindingKind::Pad : BindingKind::Key)) {
+                        selected = binding;
+                        break;
+                    }
+                    if (binding.kind == BindingKind::Key)
+                        selected = binding;
+                }
+                ReplaceAll(forms[p], tokens[action], selected.Label(pad));
+            }
+            if (pad && (word == "key" || word == "keys" || word == "key." || word == "keys."))
+                forms[p].replace(0, 3, "button");
+        }
+        words.push_back(std::move(forms));
     }
+    return words;
 }

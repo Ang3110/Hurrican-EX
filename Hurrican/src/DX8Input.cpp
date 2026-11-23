@@ -65,7 +65,6 @@ DirectInputClass::DirectInputClass() {
 #endif
 
     JoysticksFound = 0;
-    UseForceFeedback = false;
 #if defined(GCW)
     InternalJoystickIndex = 0;  // DKS: Set to the device's internal joystick controls, default is 0.
 #endif                          // GCW
@@ -83,7 +82,18 @@ DirectInputClass::~DirectInputClass() = default;
 // --------------------------------------------------------------------------------------
 bool DirectInputClass::Init() {
 #if SDL_VERSION_ATLEAST(2,0,0)
-    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) < 0)
+        Protokoll << "SDL game controller initialization: " << SDL_GetError() << std::endl;
+
+    // Poll input state while keeping the device-change events enabled.
+    SDL_EventState(SDL_JOYAXISMOTION, SDL_IGNORE);
+    SDL_EventState(SDL_JOYBALLMOTION, SDL_IGNORE);
+    SDL_EventState(SDL_JOYHATMOTION, SDL_IGNORE);
+    SDL_EventState(SDL_JOYBUTTONDOWN, SDL_IGNORE);
+    SDL_EventState(SDL_JOYBUTTONUP, SDL_IGNORE);
+    SDL_EventState(SDL_CONTROLLERAXISMOTION, SDL_IGNORE);
+    SDL_EventState(SDL_CONTROLLERBUTTONDOWN, SDL_IGNORE);
+    SDL_EventState(SDL_CONTROLLERBUTTONUP, SDL_IGNORE);
 #endif
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -101,26 +111,132 @@ bool DirectInputClass::Init() {
         Protokoll << "Loaded " << res << " mappings from game controller db" << std::endl;
     }
 #  endif
-    JoysticksFound = SDL_NumJoysticks();
+    RefreshJoysticks();
+    return true;
+}
 
-    for (int i = 0; i < JoysticksFound; i++) {
-        if (!Joysticks[i].Init(i)) {
-            Protokoll << "Error opening joystick" << std::endl;
-        } else {
-            JoystickFound = true;
+void DirectInputClass::RefreshJoysticks() {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    for (int slot = 0; slot < MAX_JOYSTICKS; ++slot)
+        if (Joysticks[slot].Active && !Joysticks[slot].IsAttached())
+            Joysticks[slot].Exit(slot);
+#endif
 
+    // Retain assigned slots when a gamepad is disconnected or a new pad appears.
+    const int devices = SDL_NumJoysticks();
+    for (int device = 0; device < devices; ++device) {
+#if SDL_VERSION_ATLEAST(2, 0, 6)
+        const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(device);
+        if (id < 0 || std::any_of(std::begin(Joysticks), std::end(Joysticks), [id](const auto &joystick) {
+            return joystick.Instance() == id;
+        }))
+            continue;
+#elif SDL_VERSION_ATLEAST(2, 0, 0)
+        if (JoystickFound)
+            break;
+#else
+        if (JoysticksFound > 0)
+            break;
+#endif
+        auto slot = std::find_if(std::begin(Joysticks), std::end(Joysticks), [](const auto &joystick) {
+            return !joystick.Active;
+        });
+        if (slot == std::end(Joysticks))
+            break;
+        if (!slot->Init(device))
+            continue;
 #if defined(GCW)
-            if (strcmp(Joysticks[i].JoystickName, "linkdev device (Analog 2-axis 8-button 2-hat)") == 0) {
-                // Replace GCW control's name with something that is clearer
-                strcpy_s(Joysticks[i].JoystickName, "GCW Zero");
-                InternalJoystickIndex = i;
-                Protokoll << "Found GCW Zero's built-in controls." << std::endl;
-            }
-#endif  // GCW
+        if (slot->JoystickName == "linkdev device (Analog 2-axis 8-button 2-hat)") {
+            slot->JoystickName = "GCW Zero";
+            InternalJoystickIndex = static_cast<int>(slot - std::begin(Joysticks));
         }
+#endif
     }
 
-    return true;
+    JoysticksFound = MAX_JOYSTICKS;
+    while (JoysticksFound > 0 && !Joysticks[JoysticksFound - 1].Active)
+        --JoysticksFound;
+    JoystickFound = JoysticksFound > 0;
+    AssignPlayerJoysticks();
+    UpdateJoysticks();
+}
+
+void DirectInputClass::AssignPlayerJoysticks() {
+    std::bitset<MAX_JOYSTICKS> claimed;
+
+    // An explicit choice owns its slot even while the controller is unplugged.
+    for (auto &player : Player) {
+        if (player.ControlType != CONTROLTYPE_JOY)
+            continue;
+        const int slot = player.JoystickIndex;
+        if (slot >= 0 && slot < MAX_JOYSTICKS && !claimed[slot])
+            claimed.set(slot);
+        else
+            player.ControlType = CONTROLTYPE_AUTO;  // Repair old duplicate assignments.
+    }
+
+    // Keep each automatic assignment that still has its controller.
+    for (auto &player : Player) {
+        if (player.ControlType != CONTROLTYPE_AUTO)
+            continue;
+        const int slot = player.JoystickIndex;
+        if (GetJoystick(slot) && !claimed[slot])
+            claimed.set(slot);
+        else
+            player.JoystickIndex = -1;
+    }
+
+    for (auto &player : Player) {
+        if (player.ControlType != CONTROLTYPE_AUTO || player.JoystickIndex >= 0)
+            continue;
+        for (int slot = NextJoystick(-1); slot >= 0; slot = NextJoystick(slot)) {
+            if (!claimed[slot]) {
+                player.JoystickIndex = slot;
+                claimed.set(slot);
+                break;
+            }
+        }
+    }
+}
+
+void DirectInputClass::CyclePlayerJoystick(int player) {
+    auto &current = Player[player];
+    const auto &other = Player[1 - player];
+    if (current.ControlType == CONTROLTYPE_AUTO) {
+        current.ControlType = CONTROLTYPE_KEYBOARD;
+    } else {
+        int slot = NextJoystick(current.ControlType == CONTROLTYPE_JOY ? current.JoystickIndex : -1);
+        if (slot >= 0 && other.ControlType == CONTROLTYPE_JOY && slot == other.JoystickIndex)
+            slot = NextJoystick(slot);
+        current.ControlType = slot >= 0 ? CONTROLTYPE_JOY : CONTROLTYPE_AUTO;
+        current.JoystickIndex = slot >= 0 ? slot : player;
+    }
+    AssignPlayerJoysticks();
+}
+
+const DirectJoystickClass *DirectInputClass::GetJoystick(int slot) const {
+    return slot >= 0 && slot < JoysticksFound && Joysticks[slot].Active ? &Joysticks[slot] : nullptr;
+}
+
+bool DirectInputClass::AnyPauseButtonDown() const {
+    for (int slot = NextJoystick(-1); slot >= 0; slot = NextJoystick(slot))
+        if (Joysticks[slot].ButtonStartPressed())
+            return true;
+    return false;
+}
+
+int DirectInputClass::NextJoystick(int after) const {
+    for (int slot = after + 1; slot < JoysticksFound; ++slot)
+        if (Joysticks[slot].Active)
+            return slot;
+    return -1;
+}
+
+const DirectJoystickClass &DirectInputClass::MenuJoystick() const {
+    if (const auto *assigned = Player[0].GetJoystick())
+        return *assigned;
+    const int first = NextJoystick(-1);
+    return Joysticks[first >= 0 ? first : 0];
 }
 
 // --------------------------------------------------------------------------------------
@@ -131,6 +247,9 @@ void DirectInputClass::Exit() {
     for (int i = 0; i < JoysticksFound; i++) {
         Joysticks[i].Exit(i);
     }
+
+    JoystickFound = false;
+    JoysticksFound = 0;
 
     Protokoll << "-> SDL/OpenGL input shutdown successfully completed !" << std::endl;
 }
@@ -179,8 +298,10 @@ void DirectInputClass::AcquireKeyboard() {}
 
 void DirectInputClass::UpdateJoysticks() {
     SDL_PumpEvents();
+    SDL_JoystickUpdate();
     for (int i = 0; i < JoysticksFound; i++)
-        Joysticks[i].Update();
+        if (Joysticks[i].Active)
+            Joysticks[i].Update();
 }
 
 // --------------------------------------------------------------------------------------
@@ -188,7 +309,7 @@ void DirectInputClass::UpdateJoysticks() {
 // --------------------------------------------------------------------------------------
 
 bool DirectInputClass::AreAllKeysReleased() const {
-    for (int i = 0; i < std::min(NumberOfKeys, MAX_KEYS); i++)
+    for (int i = 0; i < NumberOfKeys; i++)
         if (TastaturPuffer[i] != 0)
             return false;
 
@@ -200,11 +321,7 @@ bool DirectInputClass::AreAllKeysReleased() const {
 // --------------------------------------------------------------------------------------
 
 bool DirectInputClass::AnyKeyDown() const {
-    for (int i = 0; i < std::min(NumberOfKeys, MAX_KEYS); i++)
-        if (KeyDown(i))
-            return true;
-
-    return false;
+    return !AreAllKeysReleased();
 }
 
 // --------------------------------------------------------------------------------------
@@ -216,7 +333,7 @@ bool DirectInputClass::AnyButtonDown() const {
         return false;
 
     for (int i = 0; i < JoysticksFound; i++)
-        if (Joysticks[i].JoystickButtons.any())
+        if (Joysticks[i].AnyButtonDown())
             return true;
 
     return false;
@@ -234,12 +351,15 @@ static char InternalButtonNumToStringMap[8][10] = {
 
 // DKS - Added helper function to facilitate customized naming of joystick buttons and
 //      when not customized, to report joy buttons as ranging 1..99 instead of 0..98
-char *DirectInputClass::MapButtonToString(int joy_idx, int button) {
+const char *DirectInputClass::MapButtonToString(int joy_idx, int button) {
     static char buf[60];
 
     if (button < 0) {
         return TextArray[TEXT::NICHT_DEFINIERT];
     } else {
+        if (const auto *joystick = GetJoystick(joy_idx))
+            if (const char *name = joystick->BindingName(button))
+                return name;
 #ifdef GCW
         // Special case for GCW Zero's internal controls:
         if (joy_idx == GetInternalJoystickIndex() && button < GCW_MAX_BUTTONS) {
@@ -260,10 +380,6 @@ char *DirectInputClass::MapButtonToString(int joy_idx, int button) {
 bool DirectInputClass::InternalJoystickMainMenuButtonDown() {
     int joy_idx = GetInternalJoystickIndex();
     int button_idx = GetInternalJoystickMainMenuButton();
-    if (joy_idx >= 0 && joy_idx < JoysticksFound && Joysticks[joy_idx].Active &&
-        button_idx < Joysticks[joy_idx].NumButtons)
-        return Joysticks[joy_idx].JoystickButtons[button_idx];
-    else
-        return false;
+    return joy_idx >= 0 && joy_idx < JoysticksFound && Joysticks[joy_idx].ButtonPressed(button_idx);
 }
 #endif  // GCW

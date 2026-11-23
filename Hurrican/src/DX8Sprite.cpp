@@ -198,7 +198,8 @@ bool DirectGraphicsSprite::LoadImage(const std::string &filename,
                                      uint16_t xfs,
                                      uint16_t yfs,
                                      uint16_t xfc,
-                                     uint16_t yfc) {
+                                     uint16_t yfc,
+                                     TextureLayout layout) {
     if (!GameRunning || filename.empty())
         return false;
 
@@ -215,7 +216,7 @@ bool DirectGraphicsSprite::LoadImage(const std::string &filename,
         itsTexIdx = -1;
     }
 
-    itsTexIdx = Textures.LoadTexture(filename);
+    itsTexIdx = Textures.LoadTexture(filename, layout, layout == TextureLayout::Font ? SDL_Point{xfs, yfs} : SDL_Point{});
 
     if (itsTexIdx == -1) {
         Protokoll << "Textures.LoadTexture() returned error loading file " << filename << std::endl;
@@ -227,8 +228,16 @@ bool DirectGraphicsSprite::LoadImage(const std::string &filename,
     //      nearest-power-of-two expansion to make one single factor that allows
     //      flexible texture-coordinate computation with no divisions.
     //      This also means we no longer need member vars itsXSize and itsYSize.
-    itsXTexScale = static_cast<float>(Textures[itsTexIdx].npot_scalex / static_cast<double>(xs));
-    itsYTexScale = static_cast<float>(Textures[itsTexIdx].npot_scaley / static_cast<double>(ys));
+    const auto &texture = Textures[itsTexIdx];
+    halfTexel = texture.halfTexel;
+    const int frameStrideX = texture.paddedGlyphs ? FontAtlasStride(xfs) : xfs;
+    const int frameStrideY = texture.paddedGlyphs ? FontAtlasStride(yfs) : yfs;
+    const int framePadding = texture.paddedGlyphs ? FontAtlasPadding : 0;
+    // A font can use only part of its sheet, as the opening scroller does.
+    const int sheetWidth = texture.paddedGlyphs ? xs / xfs * frameStrideX : xs;
+    const int sheetHeight = texture.paddedGlyphs ? ys / yfs * frameStrideY : ys;
+    itsXTexScale = static_cast<float>(texture.npot_scalex / sheetWidth);
+    itsYTexScale = static_cast<float>(texture.npot_scaley / sheetHeight);
 
     itsXFrameCount = xfc;
     itsYFrameCount = yfc;
@@ -248,8 +257,8 @@ bool DirectGraphicsSprite::LoadImage(const std::string &filename,
 
     for (int i = 0; i < xfc * yfc; i++) {
         RECT_struct r;
-        r.top = (i / itsXFrameCount) * itsYFrameSize;
-        r.left = (i % itsXFrameCount) * itsXFrameSize;
+        r.top = (i / itsXFrameCount) * frameStrideY + framePadding;
+        r.left = (i % itsXFrameCount) * frameStrideX + framePadding;
         r.right = r.left + itsXFrameSize;
         r.bottom = r.top + itsYFrameSize;
 #ifndef NDEBUG
@@ -280,6 +289,24 @@ bool DirectGraphicsSprite::LoadImage(const std::string &filename,
 // Sprite ganz normal zeichnen mit aktuellem Surfaceausschnitt und Colorkey
 // --------------------------------------------------------------------------------------
 
+DirectGraphicsSprite::TextureRegion DirectGraphicsSprite::FrameUV(const RECT_struct &rect) const {
+    TextureRegion uv{rect.left * itsXTexScale, rect.right * itsXTexScale,
+                     rect.top * itsYTexScale, rect.bottom * itsYTexScale};
+    if (DirectGraphics.GetDisplaySettings().textureFiltering) {
+        // Keep the bilinear footprint inside this frame, including partial sprites
+        // and tiles from sheets whose physical size differs from their game size.
+        const float dx = std::min(halfTexel.x, std::abs(uv.right - uv.left) * 0.5f);
+        const float dy = std::min(halfTexel.y, std::abs(uv.bottom - uv.top) * 0.5f);
+        const float ix = std::copysign(dx, uv.right - uv.left);
+        const float iy = std::copysign(dy, uv.bottom - uv.top);
+        uv.left += ix;
+        uv.right -= ix;
+        uv.top += iy;
+        uv.bottom -= iy;
+    }
+    return uv;
+}
+
 void DirectGraphicsSprite::RenderSprite(float x, float y, D3DCOLOR Color) {
 
     // Vertice Koordinaten
@@ -289,10 +316,7 @@ void DirectGraphicsSprite::RenderSprite(float x, float y, D3DCOLOR Color) {
     float u = y + (itsRect.bottom - itsRect.top);  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -350,10 +374,7 @@ void DirectGraphicsSprite::RenderSprite(float x,
     float u = y + (itsRect.bottom - itsRect.top);  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -410,10 +431,7 @@ void DirectGraphicsSprite::RenderMirroredSprite(float x, float y, D3DCOLOR Color
     }
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     // tl = 0; tr = 0.5f; to = 0; tu = 0.5f;
 
@@ -460,10 +478,7 @@ void DirectGraphicsSprite::RenderMirroredSprite(float x, float y, D3DCOLOR Color
     float u = y + (itsRect.bottom - itsRect.top);  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -508,10 +523,7 @@ void DirectGraphicsSprite::RenderSpriteScaled(float x, float y, int width, int h
     float u = y + height;  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -560,10 +572,9 @@ void DirectGraphicsSprite::RenderSpriteScaled(float x, float y, int width, int h
     float u = y + height;  // Unten
 
     // Textur Koordinaten
-    float tl = ((Anim % itsXFrameCount) * itsXFrameSize) * itsXTexScale;                  // Links
-    float tr = ((Anim % itsXFrameCount) * itsXFrameSize + itsXFrameSize) * itsXTexScale;  // Rechts
-    float to = ((Anim / itsXFrameCount) * itsYFrameSize) * itsYTexScale;                  // Oben
-    float tu = ((Anim / itsXFrameCount) * itsYFrameSize + itsYFrameSize) * itsYTexScale;  // Unten
+    if (Anim < 0 || Anim >= itsXFrameCount * itsYFrameCount)
+        return;
+    const auto [tl, tr, to, tu] = FrameUV(itsPreCalcedRects[Anim]);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -612,10 +623,7 @@ void DirectGraphicsSprite::RenderSpriteRotated(float x, float y, float Winkel, D
     float u = y + (itsRect.bottom - itsRect.top);  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -723,10 +731,7 @@ void DirectGraphicsSprite::RenderSpriteRotated(float x, float y, float Winkel, i
     u = y + height;  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -828,10 +833,7 @@ void DirectGraphicsSprite::RenderSpriteRotatedOffset(float x,
     float u = y + height;  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 
@@ -918,10 +920,7 @@ void DirectGraphicsSprite::RenderSpriteScaledRotated(float x,
     float u = y + height;  // Unten
 
     // Textur Koordinaten
-    float tl = itsRect.left * itsXTexScale;    // Links
-    float tr = itsRect.right * itsXTexScale;   // Rechts
-    float to = itsRect.top * itsYTexScale;     // Oben
-    float tu = itsRect.bottom * itsYTexScale;  // Unten
+    auto [tl, tr, to, tu] = FrameUV(itsRect);
 
     VERTEX2D TriangleStrip[4];  // DKS - Added local declaration
 

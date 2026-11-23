@@ -79,25 +79,16 @@ void TimerClass::update() {
 // --------------------------------------------------------------------------------------
 
 void TimerClass::wait() {
-    if (maxFPS == 0)  // bei Framerate = 0 gleich wieder zurück
-        return;       // da wir da nichts abwarten müssen :-)
-
-    // Diese Schleife wird solange durchlaufen, bis die gewünschte Framerate erreicht ist
-    do {
-        // Zeit holen
-        aktuelleZeit = SDL_GetTicks();
-    } while (maxFPS < 1 / ((aktuelleZeit - letzterFrame) * ZeitFaktor));
+    if (maxFPS > 0)
+        wait((1000 + maxFPS - 1) / maxFPS);
 }
 
-// --------------------------------------------------------------------------------------
-// Wartetet "Wert" Milli-Sekunden
-// --------------------------------------------------------------------------------------
-
-void TimerClass::wait(int Wert) {
-    do {
-        // Zeit holen
-        aktuelleZeit = SDL_GetTicks();
-    } while (Wert > (aktuelleZeit - letzterFrame) * ZeitFaktor * 1000);
+void TimerClass::wait(int milliseconds) {
+    if (milliseconds <= 0)
+        return;
+    const auto elapsed = SDL_GetTicks() - static_cast<Uint32>(letzterFrame);
+    if (elapsed < static_cast<Uint32>(milliseconds))
+        SDL_Delay(static_cast<Uint32>(milliseconds) - elapsed);
 }
 
 // --------------------------------------------------------------------------------------

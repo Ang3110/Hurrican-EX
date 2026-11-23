@@ -30,7 +30,7 @@ constexpr int MAX_KEYS = 256;
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 #  define KeyDown(Taste) (TastaturPuffer[SDL_GetScancodeFromKey(Taste)] > 0)
-#  define KeyCode(Taste) (SDL_GetKeyFromScancode(static_cast<SDL_Scancode >(i)))
+#  define KeyCode(Taste) (SDL_GetKeyFromScancode(static_cast<SDL_Scancode>(Taste)))
 #else
 #  define KeyDown(Taste) (TastaturPuffer[Taste] > 0)
 #  define KeyCode(Taste) (Taste)
@@ -46,14 +46,10 @@ enum {
 };
 
 constexpr int MAX_JOYSTICKS = 4;
-// DKS - Fixed ambiguity: The game had ControlType and JoystickMode both using this define, but
-//      that was confusing and mixed up in the code:  Now, JoystickMode uses this define and
-//      ControlType uses the one following it:
-constexpr int JOYMODE_JOYPAD = 1;    // NOTE: DO NOT change the values 1 & 2 here, Texts.cpp counts on these values.
-constexpr int JOYMODE_JOYSTICK = 2;  // There originally was a 0 but it was removed for reasons in comment above.
 
 constexpr int CONTROLTYPE_KEYBOARD = 0;
 constexpr int CONTROLTYPE_JOY = 1;
+constexpr int CONTROLTYPE_AUTO = 2;
 
 // --------------------------------------------------------------------------------------
 // Klassendeklaration
@@ -93,7 +89,14 @@ class DirectInputClass {
     bool AnyKeyDown() const;
     bool AnyButtonDown() const;
     void UpdateJoysticks();
-    char *MapButtonToString(int joy_idx, int button);  // Returns char string "1" for button 0, etc..
+    void RefreshJoysticks();
+    void AssignPlayerJoysticks();
+    void CyclePlayerJoystick(int player);
+    const DirectJoystickClass *GetJoystick(int slot) const;
+    bool AnyPauseButtonDown() const;
+    int NextJoystick(int after) const;
+    const DirectJoystickClass &MenuJoystick() const;
+    const char *MapButtonToString(int joy_idx, int button);  // Returns char string "1" for button 0, etc..
                                                        // But when used on GCW Zero's internal controls
                                                        // (or other special cases) will return the custom
                                                        // string for the devices's buttons ("X", "Select", etc)
@@ -119,6 +122,5 @@ class DirectInputClass {
 
 extern DirectInputClass DirectInput;
 extern const Uint8 *TastaturPuffer;
-extern bool UseForceFeedback;  // ForceFeedback Fähigkeit nutzen ?
 
 #endif

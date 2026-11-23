@@ -46,6 +46,9 @@ class DirectGraphicsSprite {
     //      also corrects for any nearest-power-of-two resizing that was done when loading it,
     //      allowing the flexibility to load textures from disk that are resized. In
     //      other words, itsXTexScale = (1 / x-dimen-in-game) * (x-dimen-on-disk / x-dimen-after-npot-resize)
+    struct TextureRegion { float left, right, top, bottom; };
+    TextureRegion FrameUV(const RECT_struct &rect) const;
+    glm::vec2 halfTexel{0.0f};
     float itsXTexScale;  // Scale factor for X-dimension
     float itsYTexScale;  // Scale factor for Y-dimension
 
@@ -106,7 +109,8 @@ class DirectGraphicsSprite {
                    uint16_t xfs,
                    uint16_t yfs,  // x/y Size und Framegrösse
                    uint16_t xfc,
-                   uint16_t yfc);  // Frameanzahl
+                   uint16_t yfc,  // Frameanzahl
+                   TextureLayout layout = TextureLayout::Sprite);
 
     // DKS - Made inline
     void SetRect(const int32_t left,

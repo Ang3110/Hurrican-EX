@@ -14,14 +14,11 @@
 
 class Logdatei : public std::ostringstream {
   private:
-    const std::string filename_;  ///< Name of the logfile
-    std::ofstream file;           ///< Filestream of the logfile
-    // FIXME: This doesn't work currently. It's not a nice solution, anyway.
-    bool delLogFile;  // Logfile am Ende löschen, wenn kein Fehler auftrat
+    std::ofstream file;
 
   public:
-    Logdatei(const std::string &filename);
-    virtual ~Logdatei();
+    ~Logdatei() override;
+    void OpenFile(const std::string &filename);
 
     void flush();
 

@@ -52,6 +52,17 @@ GegnerClass::GegnerClass() :
 // Destruktor
 // --------------------------------------------------------------------------------------
 
+void GegnerClass::RegisterHit(PlayerClass *source) {
+    if (GegnerArt == POWERBLOCK && AnimPhase == 0 && DamageTaken <= 0.0f)
+        firstAttacker = source;
+    DamageTaken = 255.0f;
+}
+
+void GegnerClass::ShakeAtCenter(float strength) const {
+    const auto &rect = GegnerRect[GegnerArt];
+    ShakeScreen(strength, xPos + (rect.left + rect.right) * 0.5f, yPos + (rect.top + rect.bottom) * 0.5f);
+}
+
 GegnerClass::~GegnerClass() {
     for (int p = 0; p < NUMPLAYERS; p++)
         if (Player[p].AufPlattform == this)
@@ -86,11 +97,23 @@ void GegnerClass::GegnerExplode() {
 // Gegner nur rendern. Entweder per Standard oder per eigener Drawroutine
 // --------------------------------------------------------------------------------------
 
-void GegnerClass::Render() {
-    // Nicht auf Screen? Dann nicht rendern ;)
-    if (IsOnScreen() == false)
+void GegnerClass::Render(bool secondView) {
+    if (!Active && !FollowsGameplayView())
         return;
 
+    // Nicht auf Screen? Dann nicht rendern ;)
+    const bool visible = IsOnScreen(TileEngine.ViewLeft(), TileEngine.ViewRight(), TileEngine.ViewHeight());
+    if (!secondView)
+        DrawnInFirstView = visible;
+    if (!visible)
+        return;
+
+    // A turning or opening pane can expose more of the map than its settled
+    // bounds. Put newly exposed enemies in view before the frame is drawn.
+    if (!Active)
+        Activate();
+
+    AdvanceDrawEffects = !secondView || !DrawnInFirstView;
     int Anim = AnimPhase;
 
     // Gegner kuckt in die andere Richtung ?
@@ -161,13 +184,8 @@ void GegnerClass::Render() {
             // Rotwerden langsam ausfaden lassen
             // und ggf anhalten
             //
-            if (GegnerArt != POWERBLOCK)
-                DamageTaken -= Timer.sync(250.0f);
-            else
-                DamageTaken -= Timer.sync(75.0f);
-
-            if (DamageTaken < 0.0f)
-                DamageTaken = 0.0f;
+            if (AdvanceDrawEffects)
+                DamageTaken = std::max(0.0f, DamageTaken - Timer.sync(GegnerArt == POWERBLOCK ? 75.0f : 250.0f));
         }
 
 // DKS - made compilation dependent
@@ -184,10 +202,224 @@ void GegnerClass::Render() {
 // Gegner auf Grenzen checken usw
 // --------------------------------------------------------------------------------------
 
+namespace {
+bool IsArenaEncounter(int type) {
+    return type >= STAHLFAUST && type <= THEWALL;
+}
+
+enum class GroundMovement { None, Flat, Slopes };
+
+GroundMovement GroundMovementFor(int type) {
+    switch (type) {
+        case SPITTER:
+        case SPIDERBOMB:
+        case LAVAMANN:
+        case STACHELBEERE:
+            return GroundMovement::Slopes;
+        case WALKER:
+        case FIESERWALKER:
+        case FIESERWALKER2:
+        case SKIWALKER:
+        case ROBORAUPE:
+        case MADE:
+        case FETTESPINNE:
+        case MUTANT:
+            return GroundMovement::Flat;
+        default:
+            return GroundMovement::None;
+    }
+}
+}
+
+bool GegnerClass::FollowsGameplayView() const {
+    return !DontMove && !IsArenaEncounter(GegnerArt) &&
+           (DirectGraphics.GetViewWidth() > RENDERWIDTH || TileEngine.CanSplitCoop());
+}
+
+bool GegnerClass::CoopArenaReady() {
+    if (GegnerArt == DRACHE && Value2 != 0)
+        return true;
+    for (const auto &player : Player) {
+        if (player.Handlung != PlayerActionEnum::TOT && player.StageClearRunning)
+            return false;
+    }
+
+    glm::vec2 start(Value1, Value2);
+    const bool movingArena = GegnerArt == FAHRSTUHLBOSS || GegnerArt == FLUGBOSS;
+    if (movingArena) {
+        const auto &rect = GegnerRect[GegnerArt];
+        if (!TileEngine.IsInPlayerViews(xPos, yPos, xPos + rect.right, yPos + rect.bottom, false))
+            return false;
+        start = {TileEngine.XOffset, TileEngine.YOffset};
+    } else if (TileEngine.Zustand != TileStateEnum::SCROLLBAR) {
+        return false;
+    } else if (GegnerArt == SCHNEEKOENIG) {
+        start = {xPos - RENDERWIDTH / 2.0f, yPos - 320.0f};
+    } else if (GegnerArt == THEWALL) {
+        start = {xPos - 355.0f, yPos};
+    } else if (GegnerArt == DRACHE) {
+        start.y = yPos;
+    }
+
+    start = TileEngine.ClampCameraOrigin(start);
+    // Check the same horizontal strip the locked camera uses and fit both
+    // character centers in its vertical view.
+    const bool wide = GegnerArt == STAHLFAUST || GegnerArt == EISFAUST || GegnerArt == SCHNEEKOENIG ||
+                      GegnerArt == ROLLMOPS || GegnerArt == PHARAOKOPF || GegnerArt == BIGFISH || GegnerArt == UFO;
+    const auto bounds = TileEngine.HorizontalPlayfieldAt(start.x, wide);
+    const glm::vec2 minimum(bounds.left, start.y - 40.0f);
+    const glm::vec2 maximum(bounds.right - PLAYER_FRAME_WIDTH, start.y + RENDERHEIGHT - 40.0f);
+    bool ready[2]{};
+    for (int p = 0; p < 2; ++p) {
+        const auto &player = Player[p];
+        ready[p] = CoopPlayerReady(player) && player.xpos >= minimum.x && player.xpos <= maximum.x &&
+                   player.ypos >= minimum.y && player.ypos <= maximum.y;
+    }
+
+    const bool needsBoth = CoopNeedsPartner();
+    const bool grouped = !needsBoth || (std::abs(Player[0].xpos - Player[1].xpos) <= 12 * TILESIZE_X &&
+                                        std::abs(Player[0].ypos - Player[1].ypos) <= 9 * TILESIZE_Y);
+    if ((needsBoth ? ready[0] && ready[1] : ready[0] || ready[1]) && grouped) {
+        // The wider side margins are approaches, not extra encounter triggers.
+        bool entered = false;
+        for (int p = 0; p < 2; ++p) {
+            if (ready[p] && (!wide || (Player[p].xpos >= start.x &&
+                                       Player[p].xpos <= start.x + RENDERWIDTH - PLAYER_FRAME_WIDTH)) &&
+                (GegnerArt != SPINNENMASCHINE || PlayerAbstandHoriz(&Player[p]) < 450)) {
+                entered = true;
+                break;
+            }
+        }
+        if (entered) {
+            if (!movingArena) {
+                TileEngine.XOffset = start.x;
+                TileEngine.YOffset = start.y;
+            }
+            return true;
+        }
+    }
+
+    if (!needsBoth || (ready[0] && ready[1] && grouped)) {
+        waitingPlayer = -1;
+        return false;
+    }
+    if (movingArena) {
+        if (GegnerArt == FAHRSTUHLBOSS)
+            HoldCoopLiftForBoss();
+        for (int p = 0; p < 2; ++p)
+            if (ready[p])
+                WaitForCoopPartner(p);
+        return false;
+    }
+    // Remember how the first player entered. The partner can approach around a
+    // corner or from another door without moving the barrier or blocking both doors.
+    if (waitingPlayer < 0 || !ready[waitingPlayer]) {
+        waitingPlayer = ready[0] ? 0 : ready[1] ? 1 : -1;
+        if (waitingPlayer < 0)
+            return false;
+        const auto &player = Player[waitingPlayer];
+        struct Edge { float distance; CoopGateSide direction; float limit; };
+        const Edge edges[] = {
+            {player.xposold - minimum.x, CoopGateSide::Right, minimum.x + TILESIZE_X},
+            {maximum.x - player.xposold, CoopGateSide::Left, maximum.x - TILESIZE_X},
+            {player.yposold - minimum.y, CoopGateSide::Bottom, minimum.y + TILESIZE_Y},
+            {maximum.y - player.yposold, CoopGateSide::Top, maximum.y - TILESIZE_Y}
+        };
+        const auto &edge = *std::min_element(std::begin(edges), std::end(edges),
+            [](const Edge &a, const Edge &b) { return a.distance < b.distance; });
+        entranceSide = edge.direction;
+        entranceLimit = edge.limit;
+    }
+    WaitForCoopPartner(waitingPlayer, entranceSide, entranceLimit);
+    return false;
+}
+
+PlayerClass *GegnerClass::VisibleSplitTarget() const {
+    if (!TileEngine.IsCoopSplit() || DontMove || GegnerArt >= RIESENPIRANHA)
+        return nullptr;
+
+    const auto rect = DrawBounds();
+    const auto isVisible = [&](int player) {
+        const auto &pane = TileEngine.CoopView(player);
+        return Player[player].Handlung != PlayerActionEnum::TOT &&
+               xPos + rect.left < pane.x + pane.w && xPos + rect.right > pane.x &&
+               yPos + rect.top < pane.y + pane.h && yPos + rect.bottom > pane.y;
+    };
+    const bool first = isVisible(0);
+    const bool second = isVisible(1);
+    if (first == second)
+        return nullptr;
+    return &Player[first ? 0 : 1];
+}
+
+void GegnerClass::Activate() {
+    Active = true;
+    const auto &rect = GegnerRect[GegnerArt];
+    const auto *facing = Player[0].Handlung == PlayerActionEnum::TOT || (TileEngine.IsCoopSplit() && FollowsGameplayView())
+        ? pAim : &Player[0];
+    BlickRichtung = facing->xpos + 35 < xPos + (rect.left + rect.right) / 2
+        ? DirectionEnum::LINKS : DirectionEnum::RECHTS;
+
+    if (GegnerArt != EXTRAS) {
+        xSpeed *= Direction::asInt(BlickRichtung);
+        xAcc *= Direction::asInt(BlickRichtung);
+    }
+
+    UpdateTileContacts();
+}
+
+void GegnerClass::UpdateTileContacts(bool groundMovement) {
+    if (TestBlock || groundMovement) {
+        const auto &rect = GegnerRect[GegnerArt];
+        float probeX = groundMovement ? xPos : xPosOld;
+        float probeY = groundMovement ? yPos : yPosOld;
+        blockl = TileEngine.BlockLinks(xPos, yPos, probeX, probeY, rect);
+        blockr = TileEngine.BlockRechts(xPos, yPos, probeX, probeY, rect);
+        blocko = TileEngine.BlockOben(xPos, yPos, probeX, probeY, rect);
+        if (groundMovement)
+            blocku = ySpeed >= 0.0f ? TileEngine.GroundContact(xPos, yPos, rect) : 0;
+        else
+            blocku = TileEngine.BlockUntenNormal(xPos, yPos, xPosOld, yPosOld, rect);
+    } else {
+        blockl = blockr = blocko = blocku = 0;
+    }
+}
+
 bool GegnerClass::Run() {
+    if (pAim->Handlung == PlayerActionEnum::TOT)
+        pAim = ChooseAim();
+    if (auto *target = VisibleSplitTarget())
+        pAim = target;
+
+    if (!Active && IsArenaEncounter(GegnerArt) && NUMPLAYERS == 2) {
+        if (!CoopArenaReady())
+            return true;
+        Activate();
+    }
+
     // Ist der Gegner überhaupt schon aktiviert worden, also im Screen gewesen ?
     // Oder ist es ein Eisstachel, der sich immer bewegt
     if (Active == true || GegnerArt == EISSTACHEL) {
+        const auto terrain = GroundMovementFor(GegnerArt);
+        const bool groundMovement = terrain != GroundMovement::None;
+        const auto &rect = GegnerRect[GegnerArt];
+        const float startX = xPos;
+        if (groundMovement) {
+            if (ySpeed >= 0.0f)
+                yPos = TileEngine.ResolveFloorOverlap(xPos, yPos, rect);
+            UpdateTileContacts(true);
+            if (terrain == GroundMovement::Slopes && ySpeed >= 0.0f) {
+                float slopeY = yPos;
+                const auto slope = TileEngine.BlockSlopes(xPos, slopeY, rect, ySpeed);
+                const bool wouldLeaveFloor = slopeY > yPos && (blocku & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM));
+                if (slope && !wouldLeaveFloor && !TileEngine.OverlapsSolidWall(xPos, slopeY, rect)) {
+                    yPos = slopeY;
+                    UpdateTileContacts(true);
+                    blocku |= slope;
+                }
+            }
+        }
+
         // "KI" kann man es zwar nicht nennen, aber wir führen es trotzdem aus ;)
         DoKI();
 
@@ -206,13 +438,8 @@ bool GegnerClass::Run() {
             TimeToChange -= Timer.sync(1.0f);
 
         // Feststellen welche Blockarten um den Gegner herum existieren
-        if (TestBlock == true) {
-            blockl = TileEngine.BlockLinks(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blockr = TileEngine.BlockRechts(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blocko = TileEngine.BlockOben(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blocku = TileEngine.BlockUntenNormal(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-        } else
-            blockl = blockr = blocko = blocku = 0;
+        if (!groundMovement)
+            UpdateTileContacts();
 
         // Geschwindigkeit anpassen
         xSpeed += Timer.sync(xAcc);
@@ -220,11 +447,24 @@ bool GegnerClass::Run() {
 
         // Bewegen (nur, wenn keine Wand im Weg ist)
         //
-        if ((xSpeed < 0.0f && !(blockl & BLOCKWERT_WAND)) || (xSpeed > 0.0f && !(blockr & BLOCKWERT_WAND)))
-            xPos += Timer.sync(xSpeed);
-
-        if ((ySpeed < 0.0f && !(blocko & BLOCKWERT_WAND)) || (ySpeed > 0.0f && !(blocku & BLOCKWERT_WAND)))
-            yPos += Timer.sync(ySpeed);
+        if (groundMovement) {
+            // Resolve the actual movement before the enemy can end up inside a floor tile.
+            xPos = TileEngine.ClipWallMotion(startX, xPos + Timer.sync(xSpeed), yPos, rect, true);
+            const float targetY = yPos + Timer.sync(ySpeed);
+            uint32_t verticalWalls = BLOCKWERT_WAND;
+            if (targetY > yPos) {
+                verticalWalls |= BLOCKWERT_PLATTFORM;
+                if (GegnerArt == MADE)
+                    verticalWalls |= BLOCKWERT_GEGNERWAND;
+            }
+            yPos = terrain == GroundMovement::Slopes ? TileEngine.ClipVerticalMotion(yPos, targetY, xPos, rect)
+                : TileEngine.ClipWallMotion(yPos, targetY, xPos, rect, false, verticalWalls);
+        } else {
+            if ((xSpeed < 0.0f && !(blockl & BLOCKWERT_WAND)) || (xSpeed > 0.0f && !(blockr & BLOCKWERT_WAND)))
+                xPos += Timer.sync(xSpeed);
+            if ((ySpeed < 0.0f && !(blocko & BLOCKWERT_WAND)) || (ySpeed > 0.0f && !(blocku & BLOCKWERT_WAND)))
+                yPos += Timer.sync(ySpeed);
+        }
 
         // Level verlassen ?
         //
@@ -244,7 +484,7 @@ bool GegnerClass::Run() {
 
                 // blinken lassen, wenn noch nicht blinkt
                 if (DamageTaken <= 0.0f)
-                    DamageTaken = 255;
+                    RegisterHit(&Player[p]);
 
                 if (Player[p].WheelMode == false)
                     Player[p].Armour -= Timer.sync(3.0f);  // Spieler verliert Rad Energie
@@ -255,44 +495,30 @@ bool GegnerClass::Run() {
                     SoundManager.PlayWave(100, 128, 22050, SOUND::HIT + HitSound);
             }
         }
-    } else
-
-        // Taucht der Gegner im Screen auf und wird dadurch aktiviert ?
-        // Dann auch in Richtung Spieler blicken lassen
-        //
-        if (yPos - TileEngine.YOffset < RENDERHEIGHT && yPos - TileEngine.YOffset > 0 - GegnerRect[GegnerArt].bottom &&
-            xPos - TileEngine.XOffset < RENDERWIDTH && xPos - TileEngine.XOffset > 0 - GegnerRect[GegnerArt].right) {
-        Active = true;
-
-        if (Player[0].xpos + 35 <
-            xPos + GegnerRect[GegnerArt].left + (GegnerRect[GegnerArt].right - GegnerRect[GegnerArt].left) / 2)
-            BlickRichtung = DirectionEnum::LINKS;
-        else
-            BlickRichtung = DirectionEnum::RECHTS;
-
-        if (GegnerArt != EXTRAS) {
-            xSpeed = xSpeed * Direction::asInt(BlickRichtung);
-            xAcc = xAcc * Direction::asInt(BlickRichtung);
-        }
-
-        if (TestBlock == true) {
-            blockl = TileEngine.BlockLinks(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blockr = TileEngine.BlockRechts(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blocko = TileEngine.BlockOben(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-            blocku = TileEngine.BlockUntenNormal(xPos, yPos, xPosOld, yPosOld, GegnerRect[GegnerArt]);
-        } else
-            blockl = blockr = blocko = blocku = 0;
+    } else if (FollowsGameplayView()) {
+        // Wake up just beyond the camera edge so the first visible frame
+        // already contains the animated sprite.
+        const auto rect = DrawBounds();
+        constexpr float margin = TILESIZE_X;
+        if (TileEngine.IsInPlayerViews(xPos + rect.left - margin, yPos + rect.top - margin,
+                                       xPos + rect.right + margin, yPos + rect.bottom + margin))
+            Activate();
+    } else {
+        // Arena starts and invisible scripts retain their authored triggers.
+        const bool split = TileEngine.IsCoopSplit();
+        const auto &rect = GegnerRect[GegnerArt];
+        const bool inView = split
+            ? TileEngine.IsInPlayerViews(xPos, yPos, xPos + rect.right, yPos + rect.bottom, false)
+            : xPos < TileEngine.XOffset + RENDERWIDTH && xPos + rect.right > TileEngine.XOffset &&
+              yPos < TileEngine.YOffset + RENDERHEIGHT && yPos + rect.bottom > TileEngine.YOffset;
+        if (inView && !(split && IsArenaEncounter(GegnerArt)))
+            Activate();
     }
 
     // Positionen sichern
     //
     xPosOld = xPos;
     yPosOld = yPos;
-
-    // Aim ist tot? Dann neues suchen
-    //
-    if (pAim->Handlung == PlayerActionEnum::TOT)
-        pAim = ChooseAim();
 
     return true;
 }
@@ -363,23 +589,20 @@ int GegnerClass::PlayerAbstandVert(PlayerClass *pTarget) const {
 // Feststellen ob der Spieler auf einem Gegner steht (der als Plattform in Frage kommt)
 // --------------------------------------------------------------------------------------
 
-void GegnerClass::PlattformTest(RECT_struct rect) {
+PlayerClass *GegnerClass::PlattformTest(RECT_struct rect) {
+    PlayerClass *landing = nullptr;
     // Spieler steht auf dem Gegner
     //
-    for (int p = 0; p < NUMPLAYERS; p++)
+    for (int p = 0; p < NUMPLAYERS; p++) {
+        if (!CoopPlayerReady(Player[p])) {
+            if (Player[p].AufPlattform == this)
+                Player[p].AufPlattform = nullptr;
+            continue;
+        }
         if (Player[p].AufPlattform == this) {
-            // so bewegen wie die Plattform selber, wenn keine Wand im Weg
-            //
-            float x = Player[p].xpos;
-            float y = Player[p].ypos;
-
-            uint32_t br = TileEngine.BlockRechts(x, y, x, y, Player[p].CollideRect);
-            uint32_t bl = TileEngine.BlockLinks(x, y, x, y, Player[p].CollideRect);
-
-            if ((xSpeed > 0.0f && !(br & BLOCKWERT_WAND)) || (xSpeed < 0.0f && !(bl & BLOCKWERT_WAND)))
-                Player[p].xpos += Timer.sync(xSpeed);
-
-            Player[p].ypos = yPos - Player[p].CollideRect.bottom + GegnerRect[GegnerArt].top + Timer.sync(ySpeed);
+            auto &rider = Player[p];
+            const float targetY = yPos + GegnerRect[GegnerArt].top - rider.CollideRect.bottom + Timer.sync(ySpeed);
+            rider.CarryPlatform(Timer.sync(xSpeed), targetY);
 
             // Runtergefallen ?
             //
@@ -407,10 +630,16 @@ void GegnerClass::PlattformTest(RECT_struct rect) {
                     if (Player[p].yposold + Player[p].CollideRect.bottom + i + 1 >= yPos + rect.top &&
                         Player[p].yposold + Player[p].CollideRect.bottom + i + 1 <= yPos + rect.top + 10 &&
                         Player[p].xpos + Player[p].CollideRect.left <= xPos + rect.right &&
-                        Player[p].xpos + Player[p].CollideRect.right >= xPos + rect.left)
+                        Player[p].xpos + Player[p].CollideRect.right >= xPos + rect.left) {
                         Player[p].AufPlattform = this;
+                        if (!landing || Player[p].yspeed > landing->yspeed)
+                            landing = &Player[p];
+                        break;
+                    }
             }
         }
+    }
+    return landing;
 }
 
 // --------------------------------------------------------------------------------------
@@ -502,8 +731,9 @@ bool GegnerClass::TurnonShot() {
 
     if (DamageTaken > 0 && TurnCount <= 0.0f) {
         TurnCount = 20.0f;
-        if ((Player[0].xpos < xPos && BlickRichtung == DirectionEnum::RECHTS) ||
-            (Player[0].xpos > xPos && BlickRichtung == DirectionEnum::LINKS)) {
+        const auto *facing = TileEngine.IsCoopSplit() ? pAim : &Player[0];
+        if ((facing->xpos < xPos && BlickRichtung == DirectionEnum::RECHTS) ||
+            (facing->xpos > xPos && BlickRichtung == DirectionEnum::LINKS)) {
             BlickRichtung = Direction::invert(BlickRichtung);
             xSpeed *= -1;
         }
@@ -520,22 +750,25 @@ bool GegnerClass::TurnonShot() {
 // --------------------------------------------------------------------------------------
 
 bool GegnerClass::IsOnScreen() const {
+    return IsOnScreen(0.0f, RENDERWIDTH, RENDERHEIGHT);
+}
 
-    int off = std::min(GegnerRect[GegnerArt].left, 0);
+RECT_struct GegnerClass::DrawBounds() const {
+    const auto &hitbox = GegnerRect[GegnerArt];
+    const auto *sprite = pGegnerGrafix[GegnerArt];
+    const int width = sprite ? sprite->itsXFrameSize : 0;
+    const int height = sprite ? sprite->itsYFrameSize : 0;
+    if (GegnerArt == DRACHE || GegnerArt == THEWALL)
+        return {-400, 0, 400, height};
 
-    int xsize = pGegnerGrafix[GegnerArt]->itsXFrameSize;
-    int ysize = pGegnerGrafix[GegnerArt]->itsYFrameSize;
+    return {std::min(hitbox.left, 0), std::min(hitbox.top, 0),
+            std::max(hitbox.right, width), std::max(hitbox.bottom, height)};
+}
 
-    if (GegnerArt == DRACHE || GegnerArt == THEWALL) {
-        xsize = 400;
-        off = -400;
-    }
-
-    if (xPos + xsize < TileEngine.XOffset || xPos + off > TileEngine.XOffset + RENDERWIDTH ||
-        yPos + ysize < TileEngine.YOffset || yPos > TileEngine.YOffset + RENDERHEIGHT)
-        return false;
-
-    return true;
+bool GegnerClass::IsOnScreen(float left, float right, int height) const {
+    const auto rect = DrawBounds();
+    return xPos + rect.right >= TileEngine.XOffset + left && xPos + rect.left <= TileEngine.XOffset + right &&
+           yPos + rect.bottom >= TileEngine.YOffset && yPos + rect.top <= TileEngine.YOffset + height;
 }
 
 // --------------------------------------------------------------------------------------
@@ -1574,7 +1807,7 @@ GegnerClass* GegnerListClass::PushGegner(float x, float y, int Art, int Value1, 
         } break;
 
         case EISSTACHEL: {
-            pNew = new GegnerEisStachel(Value1, Value2, Light);
+            pNew = new GegnerEisStachel(x, y, Value1, Value2, Light);
         } break;
 
         case SKIWALKER: {
@@ -2108,18 +2341,18 @@ int GegnerListClass::GetNumGegner() const {
 // Alle Gegner der Liste animieren
 // --------------------------------------------------------------------------------------
 
-void GegnerListClass::RenderAll() {
+void GegnerListClass::RenderAll(bool secondView) {
 
     // Zuerst die "Gegner" rendern, die als Background fungieren
     // z.B. der große Lüfter, damit diese nicht die anderen Gegner verdecken können
     //
     for (auto& enemy: Gegner.enemies)
     {
-        if (enemy->BackGround && enemy->Active)
+        if (enemy->BackGround)
         {
             // dann Gegner rendern
             enemy->AlreadyDrawn = false;
-            enemy->Render();
+            enemy->Render(secondView);
         }
     }
 
@@ -2128,11 +2361,11 @@ void GegnerListClass::RenderAll() {
 
     for (auto& enemy: Gegner.enemies)
     {
-        if (!enemy->BackGround && enemy->Active)
+        if (!enemy->BackGround)
         {
             // dann Gegner rendern
             enemy->AlreadyDrawn = false;
-            enemy->Render();
+            enemy->Render(secondView);
         }
     }
 }
@@ -2173,16 +2406,16 @@ void GegnerListClass::DamageEnemiesonScreen(float x, float y, int MaxDamage) {
         float const ax = x - enemy->xPos;
         float const ay = y - enemy->yPos;
         float const dx = sqrtf((ax * ax) + (ay * ay));
+        if (!enemy->Active || dx >= 300)
+            continue;
+
+        const auto &rect = GegnerRect[enemy->GegnerArt];
+        if (!TileEngine.IsInPlayerViews(enemy->xPos + rect.left, enemy->yPos + rect.top,
+                                        enemy->xPos + rect.right, enemy->yPos + rect.bottom))
+            continue;
 
         // Stampfstein? Fällt runter bei Wackeln
-        if (enemy->Active &&
-            enemy->GegnerArt == STAMPFSTEIN &&
-            enemy->Handlung == GEGNER::STEHEN &&
-            dx < 300 &&
-            enemy->xPos + GegnerRect[enemy->GegnerArt].right > TileEngine.XOffset &&
-            enemy->xPos + GegnerRect[enemy->GegnerArt].left < TileEngine.XOffset + RENDERWIDTH &&
-            enemy->yPos + GegnerRect[enemy->GegnerArt].bottom > TileEngine.YOffset &&
-            enemy->yPos + GegnerRect[enemy->GegnerArt].top < TileEngine.YOffset + RENDERHEIGHT) {
+        if (enemy->GegnerArt == STAMPFSTEIN && enemy->Handlung == GEGNER::STEHEN) {
             enemy->Handlung = GEGNER::FALLEN;
             enemy->ySpeed = 20.0f;
             enemy->yAcc = 15.0f;
@@ -2193,15 +2426,9 @@ void GegnerListClass::DamageEnemiesonScreen(float x, float y, int MaxDamage) {
         }
 
         // Gegner in der Nähe? Dann Energie abziehen
-        if (enemy->Active &&
-            dx < 300 &&
-            enemy->Destroyable &&
+        if (enemy->Destroyable &&
             enemy->GegnerArt != POWERBLOCK &&
-            enemy->GegnerArt < RIESENPIRANHA &&
-            enemy->xPos + GegnerRect[enemy->GegnerArt].right > TileEngine.XOffset &&
-            enemy->xPos + GegnerRect[enemy->GegnerArt].left < TileEngine.XOffset + RENDERWIDTH &&
-            enemy->yPos + GegnerRect[enemy->GegnerArt].bottom > TileEngine.YOffset &&
-            enemy->yPos + GegnerRect[enemy->GegnerArt].top < TileEngine.YOffset + RENDERHEIGHT) {
+            enemy->GegnerArt < RIESENPIRANHA) {
 
             int amount = static_cast<int>(MaxDamage - dx);
 

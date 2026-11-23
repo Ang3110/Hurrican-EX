@@ -17,6 +17,7 @@
 #include "DX8Graphics.hpp"
 #include <time.h>
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include "DX8Font.hpp"
@@ -25,6 +26,7 @@
 #include "Globals.hpp"
 #include "Logdatei.hpp"
 #include "Main.hpp"
+#include "Tileengine.hpp"
 #if defined(USE_EGL_SDL) || defined(USE_EGL_RAW) || defined(USE_EGL_RPI)
 #include "eglport.hpp"
 #endif
@@ -68,24 +70,28 @@ DirectGraphicsClass::~DirectGraphicsClass() {}
 // --------------------------------------------------------------------------------------
 // D3D Initialisieren
 // --------------------------------------------------------------------------------------
-bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, std::uint32_t dwZ_Bits, bool VSync) {
-    bool const isFullscreen = CommandLineParams.RunWindowMode != ScreenMode::WINDOW;
+bool DirectGraphicsClass::Init(const DisplaySettings &settings) {
+    display = settings;
+    const bool isFullscreen = display.fullscreen;
     int ScreenWidth = SCREENWIDTH;
     int ScreenHeight = SCREENHEIGHT;
 
     if (CommandLineParams.LowRes) {
         ScreenWidth = LOWRES_SCREENWIDTH;
         ScreenHeight = LOWRES_SCREENHEIGHT;
+    } else if (!isFullscreen && display.width > 0) {
+        ScreenWidth = display.width;
+        ScreenHeight = display.height;
+    } else if (!isFullscreen && display.aspect != DisplayAspect::Classic) {
+        ScreenWidth = 960;
+        ScreenHeight = 540;
     }
-
-    CrtEnabled = CommandLineParams.ScreenCurvature
-        || CommandLineParams.ColorBleed
-        || CommandLineParams.Scanlines
-        || CommandLineParams.ScreenNoise;
 
     int const ScreenDepth = CommandLineParams.ScreenDepth;
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-    uint32_t flags = SDL_WINDOW_OPENGL;
+    uint32_t flags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (!CommandLineParams.LowRes)
+        flags |= SDL_WINDOW_RESIZABLE;
 #else /* SDL 1.2 */
 #if defined(USE_EGL_SDL) || defined(USE_EGL_RAW) || defined(USE_EGL_RPI)
     uint32_t flags = SDL_SWSURFACE;
@@ -104,11 +110,30 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
 
     // Initialize defaults, Video and Audio subsystems
     Protokoll << "Initializing SDL." << std::endl;
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+    SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1", SDL_HINT_DEFAULT);
+    SDL_SetHintWithPriority(SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1", SDL_HINT_DEFAULT);
+#endif
+#ifdef SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS
+    SDL_SetHint(SDL_HINT_GAMECONTROLLER_USE_BUTTON_LABELS, "0");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_JOYSTICK) == -1) {
         Protokoll << "Failed to initialize SDL: " << SDL_GetError() << "." << std::endl;
         return false;
     }
     Protokoll << "SDL initialized." << std::endl;
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    if (isFullscreen && SupportsDisplayMenu()) {
+        SDL_DisplayMode desktop{};
+        if (SDL_GetDesktopDisplayMode(0, &desktop) == 0) {
+            // Size the window before creating the GL drawable, including under compositors
+            // that handle fullscreen geometry asynchronously.
+            ScreenWidth = desktop.w;
+            ScreenHeight = desktop.h;
+        }
+    }
+#endif
 
 #if !defined(USE_EGL_SDL) && !defined(USE_EGL_RAW) && !defined(USE_EGL_RPI)
     if (ScreenDepth > 16) {     // DKS - Screen depth is now default 16 under GLES, 32 others
@@ -133,7 +158,7 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);  // DKS - Changed this to 0 (Game would not load w/ GL1.2 laptop)
     SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
 #if !SDL_VERSION_ATLEAST(2, 0, 0)
-    SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, VSync);
+    SDL_GL_SetAttribute(SDL_GL_SWAP_CONTROL, display.vsync);
 #endif
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -149,6 +174,10 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+#elif defined(USE_GL2)
+    // The GL2 path uses GLSL 1.00-style shaders and client-side vertex arrays.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
 #else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #endif /* defined(USE_GLES1) */
@@ -167,11 +196,18 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
 #if SDL_VERSION_ATLEAST(2, 0, 0)
     // Create a window. Window mode MUST include SDL_WINDOW_OPENGL for use with OpenGL.
     Window =
-        SDL_CreateWindow("Hurrican", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, ScreenWidth, ScreenHeight, flags);
+        SDL_CreateWindow(HURRICAN_EX_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, ScreenWidth, ScreenHeight, flags);
     if (Window == nullptr) {
         Protokoll << "Failed to create " << ScreenWidth << "x" << ScreenHeight
                   << " window: " << SDL_GetError() << std::endl;
         return false;
+    }
+
+    if (SupportsDisplayMenu() && display.fullscreen && display.width > 0 && !SetWindowMode(display)) {
+        Protokoll << "Could not restore saved fullscreen resolution: " << SDL_GetError() << std::endl;
+        display.width = display.height = 0;
+        if (!SetWindowMode(display))
+            return false;
     }
 
     // Create an OpenGL context associated with the window.
@@ -205,96 +241,12 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
     // DKS - EGL_Open now takes additional parameters to specify desired screen
     //      depth and vsync. If eglport.cfg file is present, it will override
     //      whatever is passed here, however:
-    if (EGL_Open(actual_w, actual_h, CommandLineParams.ScreenDepth == 16 ? 16 : 32, CommandLineParams.VSync) != 0) {
+    if (EGL_Open(actual_w, actual_h, CommandLineParams.ScreenDepth == 16 ? 16 : 32, display.vsync) != 0) {
         return false;
     }
 #endif
 
-    // DKS - BEGIN VSYNC-RELATED CODE:
-    // If not using EGL, i.e. using SDL's GL handling, some more handling of
-    //  Vsync is necessary now that context has been created:
-#if !defined(USE_EGL_SDL) && !defined(USE_EGL_RAW) && !defined(USE_EGL_RPI)
-#if SDL_VERSION_ATLEAST(2, 0, 0)
-    {
-        int retval = -1;
-        if (VSync) {
-            // Beginning with SDL 2.0, we set vsync directly with function.
-            // First, try setting it to -1, which requests 'late swap tearing', which
-            //  will not wait for vsync if previous frame was missed:
-
-            Protokoll << "-> Requesting SDL2 GL to enable VSync with 'late swap tearing' (optimal)" << std::endl;
-            retval = SDL_GL_SetSwapInterval(-1);
-            if (retval < 0) {
-                Protokoll << "-> 'Late swap tearing' VSync not supported:\n" << SDL_GetError() << std::endl;
-                Protokoll << "-> Requesting SDL2 GL to enable standard VSync" << std::endl;
-                retval = SDL_GL_SetSwapInterval(1);
-                if (retval < 0) {
-                    Protokoll << "-> *** SDL2 GL failed to enable VSync:\n" << SDL_GetError() << std::endl;
-                    VSyncEnabled = false;
-                } else {
-                    Protokoll << "-> VSync enabled successfully" << std::endl;
-                    VSyncEnabled = true;
-                }
-            } else {
-                Protokoll << "-> VSync with late-swap-tearing enabled successfully" << std::endl;
-                VSyncEnabled = true;
-            }
-        } else {
-            Protokoll << "-> Requesting SDL2 GL to disable VSync" << std::endl;
-            retval = SDL_GL_SetSwapInterval(0);
-            if (retval < 0) {
-                Protokoll << "-> *** SDL2 GL failed to disable VSync:\n" << SDL_GetError() << std::endl;
-                VSyncEnabled = true;
-            } else {
-                VSyncEnabled = false;
-            }
-        }
-    }
-#else   // SDL_VERSION < 2.0:
-    {
-        // Try to determine if VSync got set, because if not, we'll have to call
-        //  glFlush() every frame to ensure image gets displayed on all platforms
-        int status;
-        int retval = SDL_GL_GetAttribute(SDL_GL_SWAP_CONTROL, &status);
-        if (retval >= 0) {
-            if (status == 1) {
-                if (VSync) {
-                    Protokoll << "-> SDL1 GL reports VSync was enabled successfully" << std::endl;
-                } else {
-                    // We requested no VSync, but got it anyways:
-                    Protokoll << "-> *** SDL1 GL reports VSync could not be disabled. (try fullscreen?)" << std::endl;
-                }
-
-                VSyncEnabled = true;
-            } else {
-                if (VSync) {
-                    // We requested VSync, but didn't get it:
-                    Protokoll << "-> *** SDL1 GL reports VSync is unavailable. (try fullscreen?)" << std::endl;
-                } else {
-                    Protokoll << "-> SDL1 GL reports VSync was disabled successfully" << std::endl;
-                }
-                VSyncEnabled = false;
-            }
-        } else {
-            // Call to SDL_GL_GetAttribute failed for some reason, we'll assume VSync
-            //  is not set and call glFlush() each frame
-            Protokoll << "-> *** Unable to determine SDL GL VSync status:\n" << SDL_GetError() << std::endl;
-            Protokoll << "-> *** (Will assume VSync is unavailable). )" << std::endl;
-            VSyncEnabled = false;
-        }
-    }
-#endif  // SDL GL VERSION CHECKS
-#else   // Using EGL:
-    // TODO: If using EGL, determine if we actually are using VSync in
-    //  SDLPort/eglport.cpp and provide interface to set UsingVSync
-    //  boolean here. For now, assume we got it if we requested it,
-    //  ignoring the fact that if EGL_Open() found eglport.cfg file, its
-    //  settings will override whatever Hurrican requested.
-    //   Note that we don't actually do anything with the VSyncEnabled
-    //  boolean here one way or the other when EGL is being used, we just
-    //  let SDLPort/eglport.cpp take care of its own business.
-    VSyncEnabled = VSync;
-#endif  // END VSYNC-RELATED CODE
+    SetVSync(display.vsync);
 
     if (!SetDeviceInfo())
         return false;
@@ -310,11 +262,140 @@ bool DirectGraphicsClass::Init(std::uint32_t dwBreite, std::uint32_t dwHoehe, st
     return true;
 }
 
+bool DirectGraphicsClass::SupportsDisplayMenu() const {
+#if SDL_VERSION_ATLEAST(2, 0, 0) && !defined(USE_EGL_SDL) && !defined(USE_EGL_RAW) && !defined(USE_EGL_RPI)
+    return !CommandLineParams.LowRes;
+#else
+    return false;
+#endif
+}
+
+void DirectGraphicsClass::SetVSync(bool enabled) {
+#if SDL_VERSION_ATLEAST(2, 0, 0) && !defined(USE_EGL_SDL) && !defined(USE_EGL_RAW) && !defined(USE_EGL_RPI)
+    if (SDL_GL_SetSwapInterval(enabled ? 1 : 0) < 0)
+        Protokoll << "VSync request " << (enabled ? "on" : "off") << ": " << SDL_GetError() << std::endl;
+    VSyncEnabled = SDL_GL_GetSwapInterval() != 0;
+    Protokoll << "VSync requested " << (enabled ? "on" : "off") << ", active "
+              << (VSyncEnabled ? "on" : "off") << std::endl;
+#else
+    VSyncEnabled = enabled;
+#endif
+}
+
+std::vector<DisplayResolution> DirectGraphicsClass::DisplayResolutions(bool fullscreen) const {
+    std::vector<DisplayResolution> modes{{0, 0}};
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    const int monitor = SDL_GetWindowDisplayIndex(Window);
+    const auto add = [&modes](int w, int h) {
+        if (w >= 320 && h >= 240 && std::none_of(modes.begin(), modes.end(), [=](const auto &size) {
+            return size.width == w && size.height == h;
+        }))
+            modes.push_back({w, h});
+    };
+    if (fullscreen) {
+        const int modeCount = SDL_GetNumDisplayModes(monitor);
+        for (int i = 0; i < modeCount; ++i) {
+            SDL_DisplayMode mode{};
+            if (SDL_GetDisplayMode(monitor, i, &mode) == 0)
+                add(mode.w, mode.h);
+        }
+    } else {
+        constexpr DisplayResolution presets[] = {{640, 480}, {960, 540}, {1024, 768}, {1280, 720}, {1280, 800},
+            {1366, 768}, {1600, 900}, {1920, 1080}, {1920, 1200}, {2560, 1440}, {2560, 1600}, {3840, 2160}};
+        SDL_DisplayMode desktop{};
+        if (SDL_GetDesktopDisplayMode(monitor, &desktop) == 0) {
+            for (const auto &size : presets)
+                if (size.width <= desktop.w && size.height <= desktop.h)
+                    add(size.width, size.height);
+            add(desktop.w, desktop.h);
+        }
+    }
+    std::sort(modes.begin() + 1, modes.end(), [](const auto &a, const auto &b) {
+        return a.width != b.width ? a.width < b.width : a.height < b.height;
+    });
+#endif
+    return modes;
+}
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+bool DirectGraphicsClass::SetWindowMode(const DisplaySettings &settings) {
+    SDL_DisplayMode mode{};
+    const bool exclusive = settings.fullscreen && settings.width > 0;
+    if (exclusive) {
+        SDL_DisplayMode desired{};
+        desired.w = settings.width;
+        desired.h = settings.height;
+        if (!SDL_GetClosestDisplayMode(SDL_GetWindowDisplayIndex(Window), &desired, &mode) ||
+            mode.w != desired.w || mode.h != desired.h) {
+            SDL_SetError("Display resolution %dx%d is unavailable", desired.w, desired.h);
+            return false;
+        }
+    }
+
+    if ((SDL_GetWindowFlags(Window) & SDL_WINDOW_FULLSCREEN) && SDL_SetWindowFullscreen(Window, 0) < 0)
+        return false;
+    if (SDL_SetWindowDisplayMode(Window, exclusive ? &mode : nullptr) < 0)
+        return false;
+    if (settings.fullscreen)
+        return SDL_SetWindowFullscreen(Window, exclusive ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP) == 0;
+
+    const bool classic = settings.aspect == DisplayAspect::Classic;
+    const int width = settings.width > 0 ? settings.width : (classic ? SCREENWIDTH : 960);
+    const int height = settings.height > 0 ? settings.height : (classic ? SCREENHEIGHT : 540);
+    SDL_SetWindowSize(Window, width, height);
+    return true;
+}
+#endif
+
+bool DirectGraphicsClass::ApplyDisplaySettings(const DisplaySettings &settings) {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    const bool modeChanged = display.fullscreen != settings.fullscreen ||
+                             display.width != settings.width || display.height != settings.height;
+    if (modeChanged && !SetWindowMode(settings)) {
+        Protokoll << "Could not apply display settings: " << SDL_GetError() << std::endl;
+        if (!SetWindowMode(display))
+            SDL_SetWindowFullscreen(Window, display.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+        SetupFramebuffers(true);
+        return false;
+    }
+
+    const bool aspectChanged = display.aspect != settings.aspect;
+    const bool vsyncChanged = display.vsync != settings.vsync;
+    display = settings;
+    if (modeChanged || vsyncChanged)
+        SetVSync(display.vsync);
+    if (modeChanged || aspectChanged)
+        SetupFramebuffers(true);
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool DirectGraphicsClass::SupportsCrtFilter() const {
+#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
+#if defined(USE_ETC1)
+    if (SupportedETC1)
+        return false;
+#endif
+    return RenderBuffer.IsEnabled();
+#else
+    return false;
+#endif
+}
+
 // --------------------------------------------------------------------------------------
 // Direct3D beenden
 // --------------------------------------------------------------------------------------
 
 bool DirectGraphicsClass::Exit() {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    if (!GLcontext) {
+        SDL_DestroyWindow(Window);
+        SDL_Quit();
+        return true;
+    }
+#endif
 #if defined(USE_GL2) || defined(USE_GL3)
     Shaders[PROGRAM_COLOR].Close();
     Shaders[PROGRAM_TEXTURE].Close();
@@ -361,7 +442,8 @@ bool DirectGraphicsClass::SetDeviceInfo() {
     Protokoll << "GL_SHADING_LANGUAGE_VERSION: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 #endif
     glextensions = reinterpret_cast<const char *>(glGetString(GL_EXTENSIONS));
-    Protokoll << "GL_EXTENSIONS: " << glextensions << std::endl;
+    if (glextensions)
+        Protokoll << "GL_EXTENSIONS: " << glextensions << std::endl;
 
 #if defined(USE_ETC1)
     SupportedETC1 = ExtensionSupported("GL_OES_compressed_ETC1_RGB8_texture");
@@ -401,7 +483,6 @@ bool DirectGraphicsClass::SetDeviceInfo() {
 #if defined(USE_ETC1)
     if (SupportedETC1) {
         frag = g_storage_ext + "/data/shaders/" + glsl_version + "/shader_etc1_texture.frag";
-        CrtEnabled = false; // TODO add CRT simulation to etc1 fragment shader
     } else {
 #endif
     frag = g_storage_ext + "/data/shaders/" + glsl_version + "/shader_texture.frag";
@@ -416,11 +497,11 @@ bool DirectGraphicsClass::SetDeviceInfo() {
     vert = g_storage_ext + "/data/shaders/" + glsl_version + "/shader_render.vert";
     frag = g_storage_ext + "/data/shaders/" + glsl_version + "/shader_render.frag";
 
-    Shaders[PROGRAM_RENDER].AddConstant("c_WindowWidth", RenderRect.w);
-    Shaders[PROGRAM_RENDER].AddConstant("c_WindowHeight", RenderRect.h);
-    Shaders[PROGRAM_RENDER].AddConstant("c_curvature", CommandLineParams.ScreenCurvature ? 1 : 0); 
-    Shaders[PROGRAM_RENDER].AddConstant("c_color_bleed", CommandLineParams.ColorBleed ? 1 : 0);
-    Shaders[PROGRAM_RENDER].AddConstant("c_scanlines", CommandLineParams.Scanlines ? 1 : 0);
+    // Compile the usual CRT preset, or the exact effects selected on the command line.
+    const bool usePreset = !CommandLineParams.HasCrtEffects();
+    Shaders[PROGRAM_RENDER].AddConstant("c_curvature", usePreset || CommandLineParams.ScreenCurvature ? 1 : 0);
+    Shaders[PROGRAM_RENDER].AddConstant("c_color_bleed", usePreset || CommandLineParams.ColorBleed ? 1 : 0);
+    Shaders[PROGRAM_RENDER].AddConstant("c_scanlines", usePreset || CommandLineParams.Scanlines ? 1 : 0);
     Shaders[PROGRAM_RENDER].AddConstant("c_noise", CommandLineParams.ScreenNoise ? 1 : 0);
 
     if (!Shaders[PROGRAM_RENDER].Load(vert, frag)) {
@@ -447,28 +528,15 @@ bool DirectGraphicsClass::SetDeviceInfo() {
     Shaders[PROGRAM_RENDER].NameClr = Shaders[PROGRAM_RENDER].GetAttribute("a_Color");
     Shaders[PROGRAM_RENDER].NameTex = Shaders[PROGRAM_RENDER].GetAttribute("a_Texcoord0");
     Shaders[PROGRAM_RENDER].NameMvp = Shaders[PROGRAM_RENDER].GetUniform("u_MVPMatrix");
+    NameOutputWidth = Shaders[PROGRAM_RENDER].GetUniform("u_OutputWidth");
+    NameOutputHeight = Shaders[PROGRAM_RENDER].GetUniform("u_OutputHeight");
     if (CommandLineParams.ScreenNoise)
-        NameTime                    = Shaders[PROGRAM_RENDER].GetUniform("u_Time");
+        NameTime = Shaders[PROGRAM_RENDER].GetUniform("u_Time");
 #endif /* USE_GL2 || USE_GL3 */
 
     /* Matrices setup */
     g_matView = glm::mat4x4(1.0f);
     g_matModelView = glm::mat4x4(1.0f);
-
-    matProjWindow = glm::ortho(0.0f, static_cast<float>(WindowView.w), static_cast<float>(WindowView.h), 0.0f, 0.0f, 1.0f);
-    matProjRender = glm::ortho(0.0f, static_cast<float>(RenderView.w), static_cast<float>(RenderView.h), 0.0f, 0.0f, 1.0f);
-
-    matProj = matProjWindow;
-
-#if defined(USE_GL1)
-    /* change to the projection matrix and set our viewing volume. */
-    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
-    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
-#endif /* USE_GL1 */
-
-#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
-    SelectBuffer(true);
-#endif
 
     return true;
 }
@@ -477,16 +545,23 @@ bool DirectGraphicsClass::SetDeviceInfo() {
 // Copies the screen to a bitmap file
 // --------------------------------------------------------------------------------------
 
-bool DirectGraphicsClass::TakeScreenshot(const char Filename[100], int screenx, int screeny) {
-
+bool DirectGraphicsClass::TakeScreenshot(const char *filename) {
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-    SDL_Surface *image = SDL_CreateRGBSurface(SDL_SWSURFACE, screenx, screeny, 24, 0x000000FF, 0x0000FF00, 0x00FF0000, 0);
-    glReadPixels(0, 0, screenx, screeny, GL_RGB, GL_UNSIGNED_BYTE, image->pixels);
+    SDL_Rect area = RenderRect;
+#if defined(USE_FBO)
+    if (RenderBuffer.IsEnabled())
+        area = FramebufferView;
+    else
+#endif
+        area.y = WindowView.h - area.y - area.h;
+    SDL_Surface *image = SDL_CreateRGBSurface(SDL_SWSURFACE, area.w, area.h, 24, 0x000000FF, 0x0000FF00, 0x00FF0000, 0);
+    if (!image)
+        return false;
+    glReadPixels(area.x, area.y, area.w, area.h, GL_RGB, GL_UNSIGNED_BYTE, image->pixels);
     FlipSurface(image);
-    SDL_SaveBMP(image, Filename);
+    const bool saved = SDL_SaveBMP(image, filename) == 0;
     SDL_FreeSurface(image);
-
-    return true;
+    return saved;
 #else
 
 #ifndef NDEBUG
@@ -578,10 +653,13 @@ void DirectGraphicsClass::RendertoBuffer(GLenum PrimitiveType,
     // Check if the program is already in use
     if (ProgramCurrent != program_next) {
         Shaders[program_next].Use();
-        if (CommandLineParams.ScreenNoise && (program_next==PROGRAM_RENDER)) {
-            glUniform1i(NameTime, 50*SDL_GetTicks()/1000);
-        }
         ProgramCurrent = program_next;
+    }
+    if (program_next == PROGRAM_RENDER) {
+        glUniform1i(NameOutputWidth, RenderRect.w);
+        glUniform1i(NameOutputHeight, RenderRect.h);
+        if (CommandLineParams.ScreenNoise)
+            glUniform1i(NameTime, 50 * SDL_GetTicks() / 1000);
     }
 #endif
 
@@ -657,16 +735,19 @@ void DirectGraphicsClass::RendertoBuffer(GLenum PrimitiveType,
 }
 
 // --------------------------------------------------------------------------------------
-// Render den Buffer auf den Backbuffer
+// Read the gain saved by previous builds into the ten-position slider.
 // --------------------------------------------------------------------------------------
 
-void DirectGraphicsClass::DisplayBuffer() {
-    // Backbuffer mit Frontbuffer tauschen
-    ShowBackBuffer();
+void DisplaySettings::LoadBrightnessGain(int gain) {
+    // Comparing midpoints also handles values outside the old range.
+    brightnessLevel = 0;
+    while (brightnessLevel + 1 < static_cast<int>(brightnessGains.size()) &&
+           gain >= (brightnessGains[brightnessLevel] + brightnessGains[brightnessLevel + 1] + 1) / 2)
+        ++brightnessLevel;
 }
 
 bool DirectGraphicsClass::ExtensionSupported(const char *ext) {
-    if (strstr(glextensions, ext) != nullptr) {
+    if (glextensions && strstr(glextensions, ext) != nullptr) {
         Protokoll << ext << " is supported" << std::endl;
         return true;
     }
@@ -719,6 +800,12 @@ void DirectGraphicsClass::SetTexture(int idx) {
         use_shader = shader_t::TEXTURE;
         TextureHandle &th = Textures[idx];
         glBindTexture(GL_TEXTURE_2D, th.tex);
+        const GLenum filter = display.textureFiltering ? GL_LINEAR : GL_NEAREST;
+        if (th.minFilter != filter) {
+            th.minFilter = filter;
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+        }
 #if defined(USE_ETC1)
         if (SupportedETC1) {
             // Bind the alpha-channel texture when using ETC1-compressed textures:
@@ -757,7 +844,51 @@ void DirectGraphicsClass::SetTexture(int idx) {
 // Present aufrufen
 // --------------------------------------------------------------------------------------
 
+void DirectGraphicsClass::ApplyFrameBrightness(int gainPercent) {
+    if (gainPercent == 100)
+        return;
+
+    // Multiplicative gain on the completed image works on both rendering paths
+    // and leaves the monitor's gamma settings alone.
+    const auto projection = matProj;
+    const auto model = g_matModelView;
+    const auto shader = use_shader;
+    const auto blend = BlendMode;
+    matProj = g_matModelView = glm::mat4(1.0f);
+#if defined(USE_GL1)
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+#endif
+    SetTexture(-1);
+    const int gain = (gainPercent * 255 + 100) / 200;
+    const auto color = D3DCOLOR_RGBA(gain, gain, gain, 255);
+    VERTEX2D quad[] = {{-1, -1, color, 0, 0}, {1, -1, color, 0, 0},
+                       {-1, 1, color, 0, 0}, {1, 1, color, 0, 0}};
+    glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR);
+    BlendMode = BlendModeEnum::BRIGHTNESS;
+    RendertoBuffer(GL_TRIANGLE_STRIP, 2, quad);
+    if (blend == BlendModeEnum::ADDITIV)
+        SetAdditiveMode();
+    else if (blend == BlendModeEnum::WHITE)
+        SetWhiteMode();
+    else
+        SetColorKeyMode();
+    use_shader = shader;
+    matProj = projection;
+    g_matModelView = model;
+#if defined(USE_GL1)
+    if (shader == shader_t::TEXTURE)
+        glEnable(GL_TEXTURE_2D);
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+#endif
+}
+
 void DirectGraphicsClass::ShowBackBuffer() {
+    ShowBackBuffer(display.BrightnessGain());
+}
+
+void DirectGraphicsClass::ShowBackBuffer(int brightnessGain) {
 #if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
     if (RenderBuffer.IsEnabled()) {
         VERTEX2D vertices[4];
@@ -786,16 +917,20 @@ void DirectGraphicsClass::ShowBackBuffer() {
 
         SelectBuffer(false);
 
-        use_shader = CrtEnabled ? shader_t::RENDER : shader_t::TEXTURE;
-        RenderBuffer.BindTexture(true);
+        use_shader = display.crt && SupportsCrtFilter() ? shader_t::RENDER : shader_t::TEXTURE;
+        RenderBuffer.BindTexture(true, display.textureFiltering);
 
+        glDisable(GL_BLEND);
         RendertoBuffer(GL_TRIANGLE_STRIP, 2, &vertices[0]);
+        glEnable(GL_BLEND);
 
         use_shader = shader_t::COLOR;
         RenderBuffer.BindTexture(false);
 
     }
 #endif
+
+    ApplyFrameBrightness(brightnessGain);
 
 #if defined(USE_EGL_SDL) || defined(USE_EGL_RAW) || defined(USE_EGL_RPI)
     EGL_SwapBuffers();
@@ -826,112 +961,163 @@ void DirectGraphicsClass::ShowBackBuffer() {
 #endif
 }
 
-void DirectGraphicsClass::SetupFramebuffers() {
-/* Read the current window size */
+void DirectGraphicsClass::SetupFramebuffers(bool force) {
+    int width, height;
 #if SDL_VERSION_ATLEAST(2, 0, 0)
-    {
-        int tmp_w, tmp_h;
-        SDL_GetWindowSize(Window, &tmp_w, &tmp_h);
-        WindowView.w = tmp_w;
-        WindowView.h = tmp_h;
-    }
+    SDL_GL_GetDrawableSize(Window, &width, &height);
 #else
-    WindowView.w = Screen->w;
-    WindowView.h = Screen->h;
+    width = Screen->w;
+    height = Screen->h;
 #endif
-    Protokoll << "Window resolution: " << WindowView.w << "x" << WindowView.h << std::endl;
+    if (width <= 0 || height <= 0 || (!force && width == WindowView.w && height == WindowView.h))
+        return;
 
-    RenderView.x = 0;
-    RenderView.y = 0;
-    RenderView.w = RENDERWIDTH;
-    RenderView.h = RENDERHEIGHT;
-#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
-    /* Create an FBO for rendering */
-    RenderBuffer.Open(RenderView.w, RenderView.h);
-
-    if (RenderBuffer.IsEnabled()) {
-        /* Set the render viewport */
-        SelectBuffer(true);
-        glViewport(RenderView.x, RenderView.y, RenderView.w, RenderView.h);
-        SelectBuffer(false);
-        Protokoll << "Render viewport resolution: " << RenderView.w << "x" << RenderView.h << " at " << RenderView.x
-                  << "x" << RenderView.y << std::endl;
-
-        if (CommandLineParams.RunWindowMode == ScreenMode::FULLSCREEN_STRETCHED) {
-            /* Fill the whole screen area */
-            RenderRect.w = WindowView.w;
-            RenderRect.h = WindowView.h;
-            RenderRect.x = 0;
-            RenderRect.y = 0;
-        } else {
-            /* Select the best 4:3 resolution */
-            if (WindowView.w < WindowView.h) {
-                RenderRect.w = WindowView.w;
-                RenderRect.h = (WindowView.w / 4) * 3;
-            } else {
-                RenderRect.w = (WindowView.h / 3) * 4;
-                RenderRect.h = WindowView.h;
+    WindowView = {0, 0, width, height};
+    const bool stretched = display.aspect == DisplayAspect::Stretch;
+    constexpr double classicAspect = static_cast<double>(RENDERWIDTH) / RENDERHEIGHT;
+    double aspect = classicAspect;
+#if SDL_VERSION_ATLEAST(2, 0, 0) && !defined(USE_EGL_RAW) && !defined(USE_EGL_RPI)
+    if (!CommandLineParams.LowRes) {
+        switch (display.aspect) {
+            case DisplayAspect::Automatic: {
+                GLint maxSize = 0;
+                glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
+                const double maxAspect = static_cast<double>(std::max(RENDERWIDTH, maxSize & ~1)) / RENDERHEIGHT;
+                aspect = std::clamp(static_cast<double>(width) / height, classicAspect, maxAspect);
+                break;
             }
-
-            RenderRect.x = std::max(0, WindowView.w - RenderRect.w) / 2;
-            RenderRect.y = std::max(0, WindowView.h - RenderRect.h) / 2;
+            case DisplayAspect::Wide16x9:  aspect = 16.0 / 9.0; break;
+            case DisplayAspect::Wide16x10: aspect = 16.0 / 10.0; break;
+            default: break;
         }
-
-        Protokoll << "Render area: " << RenderRect.w << "x" << RenderRect.h << " at " << RenderRect.x << "x"
-                  << RenderRect.y << std::endl;
-    } else
-#endif
-    {
-        /* No scaling just center the rendering in the window */
-        WindowView.x = std::max(0, (WindowView.w - RenderView.w) / 2);
-        WindowView.y = std::max(0, (WindowView.h - RenderView.h) / 2);
-        WindowView.w = RenderView.w;
-        WindowView.h = RenderView.h;
-
-#if defined(PANDORA)
-        WindowView.x = 80;
-        WindowView.y = 0;
-#endif
     }
+#endif
 
-    if (CommandLineParams.LowRes) {
-        glViewport(0, 0, LOWRES_SCREENWIDTH, LOWRES_SCREENHEIGHT);
-    } else {
-        glViewport(WindowView.x, WindowView.y, WindowView.w, WindowView.h); /* Setup our viewport. */
+    const int renderWidth = 2 * static_cast<int>(std::lround(RENDERHEIGHT * aspect / 2));
+    RenderView = {0, 0, renderWidth, RENDERHEIGHT};
+
+    const int fittedWidth = stretched ? width : std::min(width, static_cast<int>(std::lround(height * aspect)));
+    const int fittedHeight = stretched ? height : std::min(height, static_cast<int>(std::lround(width / aspect)));
+    RenderRect = {(width - fittedWidth) / 2, (height - fittedHeight) / 2, fittedWidth, fittedHeight};
+
+    matProjWindow = glm::ortho(0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, 0.0f, 1.0f);
+    UpdateRenderTarget();
+    ClearBackBuffer();
+    Protokoll << "Drawable " << width << "x" << height << ", game view " << renderWidth << "x" << RENDERHEIGHT
+              << ", output " << RenderRect.w << "x" << RenderRect.h << std::endl;
+}
+
+void DirectGraphicsClass::SetInterfaceRendering(bool enabled) {
+#if defined(USE_FBO)
+    if (interfaceRendering != enabled) {
+        interfaceRendering = enabled;
+        UpdateRenderTarget();
+        ClearBackBuffer();
     }
-    Protokoll << "Window viewport: " << WindowView.w << "x" << WindowView.h << " at " << WindowView.x << "x"
-              << WindowView.y << std::endl;
+#endif
+}
+
+void DirectGraphicsClass::UpdateRenderTarget() {
+#if defined(USE_FBO)
+    // Rasterize menus and cutscenes at output resolution while keeping their logical coordinates.
+    const bool fullColor = interfaceRendering && !CommandLineParams.LowRes;
+    const SDL_Rect requested = fullColor ? SDL_Rect{0, 0, RenderRect.w, RenderRect.h} : RenderView;
+    if (requested.w != RequestedFramebufferView.w || requested.h != RequestedFramebufferView.h ||
+        fullColor != framebufferFullColor) {
+        RequestedFramebufferView = requested;
+        framebufferFullColor = fullColor;
+        FramebufferView = requested;
+        RenderBuffer.Close();
+        if (!RenderBuffer.Open(requested.w, requested.h, fullColor) && fullColor) {
+            FramebufferView = RenderView;
+            RenderBuffer.Open(RenderView.w, RenderView.h);
+        }
+    }
+    if (RenderBuffer.IsEnabled()) {
+        SelectBuffer(true);
+        return;
+    }
+#endif
+    glViewport(RenderRect.x, WindowView.h - RenderRect.y - RenderRect.h, RenderRect.w, RenderRect.h);
+    SetInterfaceView();
+}
+
+float DirectGraphicsClass::InterfaceLeft() const {
+    return (RENDERWIDTH - RenderView.w) * 0.5f;
+}
+
+void DirectGraphicsClass::SetInterfaceView() {
+    SetHorizontalView(InterfaceLeft());
+}
+
+void DirectGraphicsClass::SetHorizontalView(float left) {
+    matProj = glm::ortho(left, left + RenderView.w, static_cast<float>(RENDERHEIGHT), 0.0f, 0.0f, 1.0f);
+#if defined(USE_GL1)
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+#endif
+}
+
+void DirectGraphicsClass::SetGameViewport(const SDL_Rect &region, float left, float worldScale) {
+    SDL_Rect area = RenderRect;
+    int targetHeight = WindowView.h;
+#if defined(USE_FBO)
+    if (RenderBuffer.IsEnabled()) {
+        area = FramebufferView;
+        targetHeight = FramebufferView.h;
+    }
+#endif
+    // Scale edges so adjacent viewports share the same boundary at odd output sizes.
+    const int x = area.x + region.x * area.w / RenderView.w;
+    const int y = area.y + region.y * area.h / RenderView.h;
+    const int right = area.x + (region.x + region.w) * area.w / RenderView.w;
+    const int bottom = area.y + (region.y + region.h) * area.h / RenderView.h;
+    glViewport(x, targetHeight - bottom, right - x, bottom - y);
+    matProj = glm::ortho(left, left + region.w * worldScale, region.h * worldScale, 0.0f, 0.0f, 1.0f);
+#if defined(USE_GL1)
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+#endif
+}
+
+bool DirectGraphicsClass::EnsureGameStencil() {
+#if defined(USE_FBO)
+    if (RenderBuffer.IsEnabled())
+        return RenderBuffer.EnsureStencil(FramebufferView.w, FramebufferView.h);
+#endif
+    GLint stencilBits = 0;
+    glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
+    return stencilBits > 0;
 }
 
 void DirectGraphicsClass::ClearBackBuffer() {
-#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+#if defined(USE_FBO)
+    if (RenderBuffer.IsEnabled())
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 #endif
     glClear(GL_COLOR_BUFFER_BIT);
-
-#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
-    glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer.GetFramebuffer());
-    glClear(GL_COLOR_BUFFER_BIT);
+#if defined(USE_FBO)
+    if (RenderBuffer.IsEnabled()) {
+        glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer.GetFramebuffer());
+        glClear(GL_COLOR_BUFFER_BIT);
+    }
 #endif
 }
 
-#if (defined(USE_GL2) || defined(USE_GL3)) && defined(USE_FBO)
+#if defined(USE_FBO)
 void DirectGraphicsClass::SelectBuffer(bool active) {
-    if (RenderBuffer.IsEnabled()) {
-        if (active) {
-            glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer.GetFramebuffer());
-            glViewport(RenderView.x, RenderView.y, RenderView.w, RenderView.h);
-            matProj = matProjRender;
-        } else {
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-            glViewport(WindowView.x, WindowView.y, WindowView.w, WindowView.h);
-            g_matModelView = glm::mat4x4(1.0f);
-            matProj = matProjWindow;
-        }
+    if (!RenderBuffer.IsEnabled())
+        return;
+    if (active) {
+        glBindFramebuffer(GL_FRAMEBUFFER, RenderBuffer.GetFramebuffer());
+        glViewport(FramebufferView.x, FramebufferView.y, FramebufferView.w, FramebufferView.h);
+        SetInterfaceView();
+    } else {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(WindowView.x, WindowView.y, WindowView.w, WindowView.h);
+        g_matModelView = glm::mat4x4(1.0f);
+        matProj = matProjWindow;
     }
 }
-
-#endif /* (USE_GL2 || USE_GL3) && USE_FBO */
+#endif
 
 // --------------------------------------------------------------------------------------
 // Flip Surface

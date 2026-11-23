@@ -2099,8 +2099,9 @@ void PartikelClass::Run() {
     // Screen verlassen oder eh schon weg wegen der Lebensdauer ?
     //
     if (RemoveWhenOffScreen) {
-        if (yPos - TileEngine.YOffset > RENDERHEIGHT + 20 || yPos - TileEngine.YOffset + PartikelRect[PartikelArt].bottom < 20 ||
-            xPos - TileEngine.XOffset > RENDERWIDTH + 20 || xPos - TileEngine.XOffset + PartikelRect[PartikelArt].right < 20)
+        if (!TileEngine.IsInPlayerViews(xPos - 20.0f, yPos - 20.0f,
+                                        xPos + PartikelRect[PartikelArt].right - 20.0f,
+                                        yPos + PartikelRect[PartikelArt].bottom - 20.0f))
             Lebensdauer = 0.0f;
     }
 
@@ -3232,9 +3233,6 @@ bool PartikelClass::Render() {
     //      we never step outside itsPreCalcedRects boundaries
     // if (OwnDraw == false)
     if (!OwnDraw && AnimPhase <= AnimEnde) {
-        float const xts = PartikelGrafix[PartikelArt].itsXTexScale;
-        float const yts = PartikelGrafix[PartikelArt].itsYTexScale;
-
         // DKS - There is no need to compute this, it's already in the sprite's itsPreCalcedRects array:
         // int   xfs, yfs, xfc;
         // xfs = PartikelGrafix[PartikelArt].itsXFrameSize;
@@ -3256,10 +3254,7 @@ bool PartikelClass::Render() {
         float u = -TileEngine.YOffset + yPos + (Rect.bottom - Rect.top - 1) + 0.5f;  // Unten
 
         // Textur Koordinaten
-        float tl = Rect.left * xts;    // Links
-        float tr = Rect.right * xts;   // Rechts
-        float to = Rect.top * yts;     // Oben
-        float tu = Rect.bottom * yts;  // Unten
+        const auto [tl, tr, to, tu] = PartikelGrafix[PartikelArt].FrameUV(Rect);
 
         // DKS - Altered this code to assign to TriangleStrip directly:
         QUAD2D TriangleStrip;
@@ -4314,7 +4309,7 @@ void PartikelsystemClass::DrawOnly() {
     DirectGraphics.SetColorKeyMode();
 
     for (auto& particle: particles) {
-        if (particle->PartikelArt < ADDITIV_GRENZE) {
+        if (particle->Lebensdauer > 0.0f && particle->PartikelArt < ADDITIV_GRENZE) {
             particle->Render();
         }
     }
@@ -4325,7 +4320,7 @@ void PartikelsystemClass::DrawOnly() {
     DirectGraphics.SetAdditiveMode();
 
     for (auto& particle: particles) {
-        if (particle->PartikelArt >= ADDITIV_GRENZE) {
+        if (particle->Lebensdauer > 0.0f && particle->PartikelArt >= ADDITIV_GRENZE) {
             particle->Render();
         }
     }
@@ -4397,9 +4392,10 @@ void PartikelsystemClass::DoPartikelSpecial(bool ShowThem) {
 // --------------------------------------------------------------------------------------
 // Alle Partikel der Liste animieren und anzeigen
 // --------------------------------------------------------------------------------------
-void PartikelsystemClass::DoPartikel() {
+void PartikelsystemClass::DoPartikel(bool draw) {
     if (Console.Showing) {
-        DrawOnly();
+        if (draw)
+            DrawOnly();
         return;
     }
 
@@ -4410,30 +4406,35 @@ void PartikelsystemClass::DoPartikel() {
 
     //----- Partikel, die normal oder mit Alphablending gerendert werden, durchlaufen
 
-    DirectGraphics.SetColorKeyMode();
+    if (draw)
+        DirectGraphics.SetColorKeyMode();
 
     for (auto& particle: particles) {
         if (particle->PartikelArt < ADDITIV_GRENZE) {
             particle->Run();  // Partikel animieren/bewegen
 
-            if (particle->Lebensdauer > 0.0f) {
+            if (draw && particle->Lebensdauer > 0.0f) {
                 particle->Render();
             }
         }
     }
 
     CurrentPartikelTexture = -1;  // Aktuelle Textur gibt es noch keine
-    DirectGraphics.SetAdditiveMode();
+    if (draw)
+        DirectGraphics.SetAdditiveMode();
 
     for (auto& particle: particles) {
         if (particle->PartikelArt >= ADDITIV_GRENZE) {
             particle->Run();  // Partikel animieren/bewegen
 
-            if (particle->Lebensdauer > 0.0f) {
+            if (draw && particle->Lebensdauer > 0.0f) {
                 particle->Render();
             }
         }
     }
+
+    if (!draw)
+        return;
 
     DirectGraphics.SetColorKeyMode();
     // Normale Projektions-Matrix wieder herstellen
@@ -4451,7 +4452,7 @@ void PartikelsystemClass::DoPartikel() {
 void PartikelsystemClass::DoThunder() {
     if (ThunderAlpha > 0.0f) {
         D3DCOLOR col = D3DCOLOR_RGBA(ThunderColor[0], ThunderColor[1], ThunderColor[2], static_cast<int>(ThunderAlpha));
-        RenderRect(0, 0, RENDERWIDTH, RENDERHEIGHT, col);
+        RenderRect(DirectGraphics.InterfaceLeft(), 0, DirectGraphics.GetViewWidth(), RENDERHEIGHT, col);
         ThunderAlpha -= Timer.sync(40.0f);
     }
 }

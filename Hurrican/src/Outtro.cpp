@@ -61,7 +61,8 @@ OuttroClass::OuttroClass() {
 
     // Ein paar Schneepartikel adden
     for (int i = 0; i < 100; i++)
-        PartikelSystem.PushPartikel(static_cast<float>(GetRandom(RENDERWIDTH)), static_cast<float>(GetRandom(RENDERHEIGHT)),
+        PartikelSystem.PushPartikel(DirectGraphics.InterfaceLeft() + GetRandom(DirectGraphics.GetViewWidth()),
+                                    static_cast<float>(GetRandom(RENDERHEIGHT)),
                                     SCHNEEFLOCKE_END);
 }
 
@@ -98,11 +99,31 @@ void OuttroClass::InitPlayerPos() {
 // Outtro ablaufen lassen
 // --------------------------------------------------------------------------------------
 
+void OuttroClass::DrawBackground(int top) {
+    const int extra = (DirectGraphics.GetViewWidth() - RENDERWIDTH) / 2;
+    if (extra <= 0) {
+        Background.SetRect(0, top, RENDERWIDTH, RENDERHEIGHT);
+        Background.RenderSprite(0, top, 0xFFFFFFFF);
+        return;
+    }
+
+    // The center slice keeps the moons and the layered tower scene in proportion.
+    constexpr int centerLeft = 44;
+    constexpr int centerRight = 584;
+    const int height = RENDERHEIGHT - top;
+    Background.SetRect(0, top, centerLeft, RENDERHEIGHT);
+    Background.RenderSpriteScaled(-extra, top, centerLeft + extra, height, 0xFFFFFFFF);
+    Background.SetRect(centerLeft, top, centerRight, RENDERHEIGHT);
+    Background.RenderSprite(centerLeft, top, 0xFFFFFFFF);
+    Background.SetRect(centerRight, top, RENDERWIDTH, RENDERHEIGHT);
+    Background.RenderSpriteScaled(centerRight, top, RENDERWIDTH - centerRight + extra, height, 0xFFFFFFFF);
+}
+
 void OuttroClass::DoOuttro() {
     // Hintergrund rendern
     DirectGraphics.SetColorKeyMode();
     DirectGraphics.SetFilterMode(false);
-    Background.RenderSprite(0, 0, 0, 0xFFFFFFFF);
+    DrawBackground(0);
 
     // Turm rendern
     float off = 0.0f;
@@ -120,8 +141,7 @@ void OuttroClass::DoOuttro() {
     Henry.RenderSprite(276, 291, 0xFFFFFFFF);
 
     // Und nochmal den unteren Teil vom Background drüber
-    Background.SetRect(0, 360, RENDERWIDTH, RENDERHEIGHT);
-    Background.RenderSprite(0, 360, 0xFFFFFFFF);
+    DrawBackground(360);
 
     // Auspuff Partikel =)
     PartikelSystem.DoPartikelSpecial(true);
@@ -186,7 +206,8 @@ void OuttroClass::DoOuttro() {
     if (Snow <= 0.0f) {
         Snow = 1.0f;
 
-        PartikelSystem.PushPartikel(static_cast<float>(GetRandom(RENDERWIDTH)), -8, SCHNEEFLOCKE_END);
+        PartikelSystem.PushPartikel(DirectGraphics.InterfaceLeft() + GetRandom(DirectGraphics.GetViewWidth()),
+                                    -8, SCHNEEFLOCKE_END);
     }
 
     switch (Zustand) {
@@ -206,7 +227,7 @@ void OuttroClass::DoOuttro() {
             }
 
             D3DCOLOR col = D3DCOLOR_RGBA(0, 0, 0, 255 - static_cast<int>(Counter));
-            RenderRect(0, 0, RENDERWIDTH, RENDERHEIGHT, col);
+            RenderRect(DirectGraphics.InterfaceLeft(), 0, DirectGraphics.GetViewWidth(), RENDERHEIGHT, col);
 
             SmokeDelay -= Timer.sync(1.0f);
 
@@ -347,27 +368,20 @@ void OuttroClass::DoOuttro() {
                 num_lines = 30;
             }
 
+            const auto &credits = CreditLines(MAX_DRAW_WIDTH);
+            const int story = TEXT::OUTTRO11 - TEXT::OUTTRO1 + 1;
+            const int lastCredit = story + static_cast<int>(credits.size());
+            const int end = lastCredit + TEXT::MARIO7 - TEXT::MARIO1 + 1;
             Counter += Timer.sync(1.5f);
-
-            while (Counter >= static_cast<float>(yoff_inc)) {
-                Counter -= static_cast<float>(yoff_inc);
-                TextOff++;
-
-                if (TEXT::OUTTRO1 + TextOff > TEXT::SEPERATOR_MARIO + CreditsCount - num_lines)
-                    TextOff = 0;
+            while (Counter >= yoff_inc) {
+                Counter -= yoff_inc;
+                if (++TextOff >= end + 27) TextOff = 0;
             }
-
-            for (int i = 0, display_line = 0; i < num_lines; i++, display_line++) {
-                int AnzahlCredits = CreditsCount - 65;
-                int off2 = TextOff + i - 27;
-                if (off2 > 0) {
-                    std::string text;
-                    if (TEXT::OUTTRO1 + off2 < TEXT::SEPERATOR_MARIO)
-                        text = TextArray[TEXT::OUTTRO1 + off2];
-                    else if (TEXT::OUTTRO1 + off2 <= TEXT::SEPERATOR_MARIO + AnzahlCredits)
-                        text = Credits[off2 + 25];
-                    else if (TEXT::OUTTRO1 + off2 <= TEXT::SEPERATOR_MARIO + AnzahlCredits + 10)
-                        text = TextArray[TEXT::OUTTRO1 + off2 - AnzahlCredits];
+            for (int i = 0, display_line = 0; i < num_lines; ++i, ++display_line) {
+                const int row = TextOff + i - 27;
+                if (row >= 0 && row < end) {
+                    const std::string text = row < story ? TextArray[TEXT::OUTTRO1 + row] :
+                        row < lastCredit ? credits[row - story] : TextArray[TEXT::MARIO1 + row-lastCredit];
 
                     // rendern
                     if (CommandLineParams.LowRes && text.size() > 10 &&

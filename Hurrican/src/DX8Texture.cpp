@@ -44,14 +44,25 @@ void TexturesystemClass::Exit() {
 
 // DKS - This largely replaces and expands on a lot of the code
 //      DirectGraphicsSprite::LoadImage used to handle.
-int16_t TexturesystemClass::LoadTexture(const std::string &filename) {
+int16_t TexturesystemClass::LoadTexture(const std::string &filename, TextureLayout layout, SDL_Point glyphSize) {
     if (filename.empty())
         return -1;
 
     int16_t idx = -1;
 
     // Check to see if the texture was previously loaded at some point
-    std::map<std::string, int16_t>::iterator it = _texture_map.find(filename);
+    std::string key = filename;
+    if (layout == TextureLayout::Font)
+        key += ':' + std::to_string(glyphSize.x) + 'x' + std::to_string(glyphSize.y);
+    else if (layout == TextureLayout::Repeat)
+        key += ":repeat";
+    else if (layout == TextureLayout::MirrorRepeat)
+        key += ":mirror";
+    else if (layout == TextureLayout::Parallax)
+        key += ":parallax";
+    else if (layout == TextureLayout::VerticalParallax)
+        key += ":vertical-parallax";
+    std::map<std::string, int16_t>::iterator it = _texture_map.find(key);
     if (it != _texture_map.end()) {
         // Texture has been loaded previously, so it at least has a slot in _loaded_textures,
         //  but if its instances == 0, it will need to be re-loaded from disk.
@@ -76,7 +87,7 @@ int16_t TexturesystemClass::LoadTexture(const std::string &filename) {
         _loaded_textures.push_back(th);
         idx = _loaded_textures.size() - 1;
         // Create entry in _texture_map mapping texture's filename to the new _loaded_textures index
-        _texture_map[filename] = idx;
+        _texture_map[key] = idx;
     }
 
     TextureHandle &th = _loaded_textures[idx];
@@ -90,7 +101,7 @@ int16_t TexturesystemClass::LoadTexture(const std::string &filename) {
 #endif
     } else {
         // This texture is not in VRAM, load it..
-        if (!LoadTextureFromFile(filename, th)) {
+        if (!LoadTextureFromFile(filename, th, layout, glyphSize)) {
             Protokoll << "-> Error loading texture from disk: " << filename << std::endl;
             GameRunning = false;
             th.instances = 0;
@@ -100,7 +111,7 @@ int16_t TexturesystemClass::LoadTexture(const std::string &filename) {
     }
 
     // If we have loaded npot scale factors from an external file, see if we have some for this texture:
-    if (!_scalefactors_map.empty()) {
+    if (layout == TextureLayout::Sprite && !_scalefactors_map.empty()) {
         std::string filename_sans_ext(filename);
         ReplaceAll(filename_sans_ext, ".png", "");
         std::map<std::string, std::pair<double, double> >::iterator it2 = _scalefactors_map.find(filename_sans_ext);
@@ -182,7 +193,7 @@ void TexturesystemClass::ReadScaleFactorsFiles() {
 #endif
 }
 
-bool TexturesystemClass::LoadTextureFromFile(const std::string &filename, TextureHandle &th) {
+bool TexturesystemClass::LoadTextureFromFile(const std::string &filename, TextureHandle &th, TextureLayout layout, SDL_Point glyphSize) {
     if (filename.empty()) {
         Protokoll << "Error: empty filename passed to LoadTextureFromFile()" << std::endl;
         return false;
@@ -208,7 +219,7 @@ bool TexturesystemClass::LoadTextureFromFile(const std::string &filename, Textur
 
 loadfile:
     // Load the texture from disk:
-    success = SDL_LoadTexture(path, filename, nullptr, 0, th);
+    success = SDL_LoadTexture(path, filename, nullptr, 0, th, layout, glyphSize);
     if (success)
         goto loaded;
 

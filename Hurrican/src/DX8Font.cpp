@@ -47,24 +47,41 @@ uint8_t demofont_charwidths[256] = {
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
     1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1};
 uint8_t menufont_charwidths[256] = {
-    4,  8,  28, 19, 26, 23, 3,  6,  7,  28, 16, 4, 8,  3,  19, 18, 11, 17, 18, 19, 17, 18, 17, 18, 17, 3,  4,  15, 16,
-    15, 15, 19, 21, 18, 18, 20, 15, 14, 19, 18, 3, 15, 19, 15, 25, 20, 20, 18, 22, 18, 18, 18, 18, 19, 28, 20, 18, 18,
-    1,  1,  1,  1,  16, 1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  21, 21, 1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  20, 1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1};
+    4, 8, 28, 19, 26, 23, 3, 6, 7, 28, 16, 4, 8, 3, 19, 18,
+    11, 17, 18, 19, 17, 18, 17, 18, 17, 3, 4, 15, 16, 15, 15, 19,
+    21, 18, 18, 20, 15, 14, 19, 18, 3, 15, 19, 15, 25, 20, 20, 18,
+    22, 18, 18, 18, 18, 19, 28, 20, 18, 18, 8, 1, 8, 1, 16, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 21,
+    1, 18, 1, 15, 1, 17, 1, 20, 1, 18, 1, 18, 1, 18, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 21, 21, 21, 21,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 15, 21,
+    21, 21, 21, 21, 21, 1, 18, 15, 15, 15, 15, 5, 6, 6, 6, 1,
+    20, 20, 20, 20, 20, 20, 1, 1, 18, 18, 18, 18, 18, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
 uint8_t smallfont_charwidths[256] = {
-    4, 5, 8, 7, 10, 10, 3, 5,  5,  7, 7, 4,  5,  3, 5, 7,  5, 7,  7, 7, 7, 7, 7,  7, 7, 3, 4, 7, 7, 7, 6, 9,
-    8, 8, 8, 9, 8,  8,  9, 8,  5,  7, 8, 8,  10, 9, 9, 8,  9, 8,  7, 9, 8, 9, 10, 9, 9, 8, 5, 5, 5, 7, 8, 3,
-    8, 7, 7, 7, 7,  7,  7, 7,  3,  6, 7, 4,  9,  7, 7, 7,  7, 6,  7, 5, 7, 7, 9,  7, 7, 7, 5, 3, 5, 6, 8, 8,
-    7, 7, 8, 8, 8,  8,  7, 7,  7,  7, 5, 5,  4,  8, 7, 8,  9, 10, 7, 7, 7, 7, 7,  9, 8, 7, 8, 9, 7, 8, 8, 4,
-    7, 7, 7, 9, 1,  5,  6, 10, 1,  7, 7, 3,  1,  1, 1, 1,  1, 1,  1, 8, 7, 8, 1,  1, 1, 1, 1, 1, 1, 8, 1, 1,
-    1, 1, 1, 8, 8,  8,  1, 1,  10, 7, 1, 10, 1,  1, 1, 10, 8, 8,  8, 1, 1, 9, 1,  1, 1, 1, 1, 8, 1, 1, 7, 1,
-    1, 1, 1, 8, 1,  1,  1, 1,  1,  1, 1, 1,  1,  1, 1, 1,  1, 1,  1, 1, 1, 7, 1,  1, 1, 1, 1, 7, 1, 1, 1, 1,
-    1, 1, 1, 1, 1,  1,  1, 1,  1,  1, 1, 1,  1,  1, 1, 1,  1, 1,  1, 1, 1, 1, 1,  1, 1, 1, 1, 1, 1, 1, 1, 1};
+    4, 5, 8, 7, 10, 10, 3, 5, 5, 7, 7, 4, 5, 3, 5, 7,
+    5, 7, 7, 7, 7, 7, 7, 7, 7, 3, 4, 7, 7, 7, 6, 9,
+    8, 8, 8, 9, 8, 8, 9, 8, 5, 7, 8, 8, 10, 9, 9, 8,
+    9, 8, 7, 9, 8, 9, 10, 9, 9, 8, 5, 5, 5, 7, 8, 3,
+    8, 7, 7, 7, 7, 7, 7, 7, 3, 6, 7, 4, 9, 7, 7, 7,
+    7, 6, 7, 5, 7, 7, 9, 7, 7, 7, 5, 3, 5, 6, 8, 8,
+    8, 8, 7, 8, 7, 8, 4, 9, 7, 7, 7, 8, 7, 8, 7, 8,
+    9, 10, 7, 7, 7, 7, 7, 9, 8, 7, 8, 9, 7, 8, 8, 4,
+    4, 7, 7, 9, 1, 5, 6, 10, 1, 7, 7, 3, 9, 9, 9, 9,
+    1, 1, 1, 8, 7, 8, 1, 1, 1, 1, 1, 1, 1, 8, 6, 8,
+    8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5, 5, 5, 5, 10,
+    9, 9, 9, 9, 9, 9, 1, 1, 8, 8, 8, 8, 9, 1, 7, 8,
+    8, 8, 8, 8, 8, 1, 7, 7, 7, 7, 7, 3, 3, 3, 3, 1,
+    7, 7, 7, 7, 7, 7, 1, 1, 7, 7, 7, 7, 7, 1, 7, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
 
 DirectGraphicsFont::DirectGraphicsFont() {
     // DKS - Added support for font scaling
@@ -110,7 +127,7 @@ bool DirectGraphicsFont::LoadFont(const char *Filename,
 
     // DKS - Why is last parameter 0? That would cause problems in memory allocation:
     // if (!mTexture->LoadImage(Filename, xts, yts, xCharsize, yCharsize, xChars, 0))
-    if (!mTexture->LoadImage(Filename, xts, yts, xCharsize, yCharsize, xChars, yChars)) {
+    if (!mTexture->LoadImage(Filename, xts, yts, xCharsize, yCharsize, xChars, yChars, TextureLayout::Font)) {
         Protokoll << "Error loading font: " << Filename << std::endl;
         GameRunning = false;
         return false;
@@ -122,7 +139,7 @@ bool DirectGraphicsFont::LoadFont(const char *Filename,
     //
     mXCharSize = xCharsize;
     mYCharSize = yCharsize;
-    mXChars = xChars;
+    mGlyphCount = xChars * yChars;
 
     // DKS - We no longer read the font directly, as character widths are now defined in hard-coded arrays,
     //      so most of the rest of the function is now disabled and mCharLength just points to one
@@ -267,35 +284,28 @@ bool DirectGraphicsFont::DrawValue(float x, float y, float Value, D3DCOLOR Color
 // Text an xPos,yPos mit Farbe Color ausgeben
 // --------------------------------------------------------------------------------------
 
-bool DirectGraphicsFont::DrawText(float x, float y, const char Text[], D3DCOLOR Color) {
-    unsigned int const len = strlen(Text);
+bool DirectGraphicsFont::DrawGlyph(float x, float y, int glyph, D3DCOLOR color, int scale) {
+    if (glyph < 0 || glyph >= mGlyphCount)
+        return false;
 
-    // DKS - Added:
-    if (!Text || len == 0)
+    if (scale == 1)
+        mTexture->RenderSprite(x, y, glyph, color);
+    else
+        mTexture->RenderSpriteScaled(x, y, mXCharSize * scale - 1, mYCharSize * scale - 1, glyph, color);
+    return true;
+}
+
+bool DirectGraphicsFont::DrawText(float x, float y, const char Text[], D3DCOLOR Color) {
+    if (!Text)
         return true;
+    const unsigned int len = strlen(Text);
 
     float const oldx = x;
     for (unsigned int i = 0; i < len; i++) {
         unsigned char const ch = Text[i];  // Aktuell zu bearbeitendes Zeichen holen
         unsigned char const z = ch - 33;   // "!" als erstes Zeichen setzen, das heisst,
-        // Fontgrafik muss mit "!" beginnen
-        // Position des aktuellen Zeichens in der Grafik berechnen
-        RECT_struct rect;
-        rect.left = (z % mXChars) * mXCharSize;
-        rect.top = (z / mXChars) * mYCharSize;
-        rect.right = rect.left + mXCharSize;
-        rect.bottom = rect.top + mYCharSize;
-
-        mTexture->SetRect(rect.left, rect.top, rect.right, rect.bottom);
-
-        if (ch != 32 && ch != '\n') {
-            // DKS - Added support for font scaling
-            if (mScaleFactor == 1) {
-                mTexture->RenderSprite(x, y, Color);
-            } else {
-                mTexture->RenderSpriteScaled(x, y, mXCharSize * mScaleFactor - 1, mYCharSize * mScaleFactor - 1, Color);
-            }
-        }
+        if (ch >= '!')
+            DrawGlyph(x, y, z, Color, mScaleFactor);
 
         if (ch == 32)
             // DKS - Added support for font scaling
@@ -339,23 +349,7 @@ void DirectGraphicsFont::DrawTextCenterAlign(float x, float y, const char Text[]
 // --------------------------------------------------------------------------------------
 
 bool DirectGraphicsFont::DrawDemoChar(float x, float y, const char Text, D3DCOLOR Color) {
-    if (Text == 32 || Text == '\n')
-        return false;
-
-    unsigned char const z = Text - 33;  // Aktuell zu bearbeitendes Zeichen holen
-                                        // "!" als erstes Zeichen setzen, das heisst,
-    // Fontgrafik muss mit "!" beginnen
-    // Position des aktuellen Zeichens in der Grafik berechnen
-    RECT_struct rect;
-    rect.left = (z % mXChars) * mXCharSize;
-    rect.top = (z / mXChars) * mYCharSize;
-    rect.right = rect.left + mXCharSize;
-    rect.bottom = rect.top + mYCharSize;
-
-    mTexture->SetRect(rect.left, rect.top, rect.right, rect.bottom);
-    mTexture->RenderSprite(x, y, Color);
-
-    return true;
+    return DrawGlyph(x, y, static_cast<unsigned char>(Text) - '!', Color, 1);
 }
 
 // --------------------------------------------------------------------------------------
@@ -369,18 +363,8 @@ bool DirectGraphicsFont::DrawDemoText(float x, float y, const char Text[], D3DCO
     for (unsigned int i = 0; i < len; i++) {
         unsigned char const ch = Text[i];  // Aktuell zu bearbeitendes Zeichen holen
         unsigned char const z = ch - 33;   // "!" als erstes Zeichen setzen, das heisst,
-        // Fontgrafik muss mit "!" beginnen
-        // Position des aktuellen Zeichens in der Grafik berechnen
-        RECT_struct rect;
-        rect.left = (z % mXChars) * mXCharSize;
-        rect.top = (z / mXChars) * mYCharSize;
-        rect.right = rect.left + mXCharSize;
-        rect.bottom = rect.top + mYCharSize;
-
-        mTexture->SetRect(rect.left, rect.top, rect.right, rect.bottom);
-
-        if (ch != 32 && ch != '\n')
-            mTexture->RenderSprite(x, y, Color);
+        if (ch >= '!')
+            DrawGlyph(x, y, z, Color, 1);
 
         if (ch == 32)
             x += mXCharSize;       // Bei Space frei lassen
@@ -406,24 +390,8 @@ bool DirectGraphicsFont::DrawText(float x, float y, const char Text[], D3DCOLOR 
     for (unsigned int i = 0; i < len; i++) {
         unsigned char const ch = Text[i];  // Aktuell zu bearbeitendes Zeichen holen
         unsigned char const z = ch - 33;   // "!" als erstes Zeichen setzen, das heisst,
-        // Fontgrafik muss mit "!" beginnen
-        // Position des aktuellen Zeichens in der Grafik berechnen
-        RECT_struct rect;
-        rect.left = (z % mXChars) * mXCharSize;
-        rect.top = (z / mXChars) * mYCharSize;
-        rect.right = rect.left + mXCharSize;
-        rect.bottom = rect.top + mYCharSize;
-
-        mTexture->SetRect(rect.left, rect.top, rect.right, rect.bottom);
-
-        if (ch != 32 && ch != '\n') {
-            // DKS - Added support for font scaling
-            if (mScaleFactor == 1) {
-                mTexture->RenderSprite(x, y, Color);
-            } else {
-                mTexture->RenderSpriteScaled(x, y, mXCharSize * mScaleFactor - 1, mYCharSize * mScaleFactor - 1, Color);
-            }
-        }
+        if (ch >= '!')
+            DrawGlyph(x, y, z, Color, mScaleFactor);
 
         if (ch == 32)
             // DKS - Added support for font scaling

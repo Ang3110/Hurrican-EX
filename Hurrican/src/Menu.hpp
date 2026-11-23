@@ -34,7 +34,7 @@ enum {
   MENUZUSTAND_MAINMENU = 0,
   MENUZUSTAND_STARTGAME = 1,
   MENUZUSTAND_VOLUMES = 2,
-  MENUZUSTAND_NEWGAME = 6,
+  MENUZUSTAND_TUTORIAL = 6,
   MENUZUSTAND_PLAYERCOUNT = 7,
   MENUZUSTAND_SELECTSKILL = 8,
   MENUZUSTAND_LOADGAME = 9,
@@ -42,7 +42,8 @@ enum {
   MENUZUSTAND_ENTERNAME = 11,
   MENUZUSTAND_LANGUAGE = 12,
   MENUZUSTAND_TASTEN = 13,
-  MENUZUSTAND_BUTTONS = 14
+  MENUZUSTAND_BUTTONS = 14,
+  MENUZUSTAND_DISPLAY = 15
 };
 
 // ----- Defines für die einzelnen Menu-Punkte
@@ -63,28 +64,32 @@ enum {
   MENUPUNKT_VOLUMES_MUSIC = 1,
   MENUPUNKT_VOLUMES_TASTEN = 2,  // Controls  reconfiguration
   MENUPUNKT_VOLUMES_LANGUAGE = 3,
-  MENUPUNKT_VOLUMES_DETAILS = 4
+  MENUPUNKT_VOLUMES_DETAILS = 4,
+  MENUPUNKT_VOLUMES_DISPLAY = 5
 };
 
-// DKS - Added missing defines for NEWGAME sub-menu
-
 enum {
-  MENUPUNKT_NEWGAME_TUTORIAL = 0,
-  MENUPUNKT_NEWGAME_STARTNEWGAME = 1,
-  MENUPUNKT_NEWGAME_LOADGAME = 2
+  DISPLAY_MODE = 0,
+  DISPLAY_ASPECT,
+  DISPLAY_SPLITSCREEN_TYPE,
+  DISPLAY_RESOLUTION,
+  DISPLAY_VSYNC,
+  DISPLAY_TEXTURE_FILTERING,
+  DISPLAY_CRT_FILTER,
+  DISPLAY_BRIGHTNESS,
+  DISPLAY_APPLY,
+  DISPLAY_LAST = DISPLAY_APPLY
 };
 
 // DKS - Controls-reconfiguration menu: (Menu "tasten")
 
 enum {
-  MENU_TASTEN_FORCEFEEDBACK_LINE = 0,
-  MENU_TASTEN_DEFAULTS_LINE = 1,
-  MENU_TASTEN_PLAYER_LINE = 2,
-  MENU_TASTEN_TYPE_LINE = 3,
-  MENU_TASTEN_MODE_LINE = 4,
-  MENU_TASTEN_SENSITIVITY_LINE = 5,
-  MENU_TASTEN_NUM_NON_CONTROLS = 6,  // Number of non-controls lines (before assignable controls begin)
-  MENU_TASTEN_NUM_CONTROLS = 12,     // Number of assignable-controls lines
+  MENU_TASTEN_DEFAULTS_LINE = 0,
+  MENU_TASTEN_PLAYER_LINE = 1,
+  MENU_TASTEN_TYPE_LINE = 2,
+  MENU_TASTEN_RUMBLE_LINE = 3,
+  MENU_TASTEN_NUM_NON_CONTROLS = 4,  // Number of non-controls lines (before assignable controls begin)
+  MENU_TASTEN_NUM_CONTROLS = MAX_AKTIONEN,     // Number of assignable-controls lines
   MENU_TASTEN_NUM_LINES = (MENU_TASTEN_NUM_CONTROLS + MENU_TASTEN_NUM_NON_CONTROLS)
 };
 
@@ -171,6 +176,18 @@ class MenuClass {
     float LoadingProgress;
     float LoadingItemsToLoad;
     int LoadingItemsLoaded;
+    Uint32 LastLoadingFrame = 0;
+    DisplaySettings pendingDisplay;
+    const char *displayStatus = nullptr;
+    Uint32 displayStatusStarted = 0;
+    bool showVsyncWarning = false;
+    int musicAdjustmentDirection = 0;
+    Uint32 musicAdjustmentTime = 0;
+    int lastMenuJoystick = -1;
+    const DirectJoystickClass *remapJoystick = nullptr;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+    SDL_JoystickID remapInstance = -1;
+#endif
 
     StarStruct Stars[MAX_STARS];              // Hintergrund-Sterne
     SavegameStruct Savegames[MAX_SAVEGAMES];  // Die Savegames (für Load Game)
@@ -191,7 +208,9 @@ class MenuClass {
 
     int AktuellerPunkt;    // Aktuell gewählter Menupunkt
     int AktuellerZustand;  // Aktueller Menu-Unterpunkt
-    int CurrentPlayer;     // Fürs Steuerung Konfigurieren
+    int CurrentPlayer = 0;
+    int pendingDirection = -1;
+    const char *bindingNotice = nullptr;
 
     int NewRank;                         // Neuer Platz in der Highscore
     int NewScore;                        // Neue Punktezahl
@@ -208,6 +227,7 @@ class MenuClass {
 
     void ShowMenuBack();            // Hintergrund des Menus
     void ShowMenu();                // Menu anzeigen
+    int PendingBrightnessGain() const { return pendingDisplay.BrightnessGain(); }
     void DoMenu();                  // Alles machen, was da Menu betrifft =)
     void LoadSavegames();           // Savegame Structs mit Daten füllen
     void ShowSavegames(int Highlight);  // Verfügbare Savegames anzeigen
@@ -218,7 +238,8 @@ class MenuClass {
     void CheckForNewHighscore();
     void ResetProgressBar();
     void StartProgressBar(int items);
-    void UpdateProgressBar();
+    bool UpdateLoadingProgress(bool finished);
+    void DrawProgressBar();
 
 #ifndef NDEBUG
     int ItemsLoaded() const { return LoadingItemsLoaded; }

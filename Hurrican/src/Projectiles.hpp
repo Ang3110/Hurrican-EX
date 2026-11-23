@@ -189,6 +189,7 @@ class ProjectileClass {
     float Winkel;                // nur für SpreadShots
     float Counter;               // Spezialcounter für Extra-Aktionen
     bool OwnDraw;
+    void UpdateCollisionRect();
 
   public:
     int ShotArt;                 // Art des Schusses (siehe Defines)
@@ -262,7 +263,8 @@ class ProjectileListClass {
     void ClearAll();               // Alle Objekte löschen
     void ClearType(int type);      // Alle Objekte eines Typs löschen
     int GetNumProjectiles() const; // Zahl der Schüsse zurückliefern
-    void DoProjectiles();          // Alle Schüsse der Liste animieren
+    void DoProjectiles(bool draw = true);
+    void DrawProjectiles();
 };
 
 // --------------------------------------------------------------------------------------

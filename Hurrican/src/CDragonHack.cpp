@@ -55,41 +55,43 @@ void CDragonHack::Run() {
             else {
                 m_AppearCount = 20.0f;
                 m_State = DragonState::FLY;
+                const float left = TileEngine.IsCoopSplit() ? TileEngine.CoopView(0).x : TileEngine.XOffset;
+                const float top = TileEngine.IsCoopSplit() ? TileEngine.CoopView(0).y : TileEngine.YOffset;
+                const int width = TileEngine.IsCoopSplit() ? TileEngine.CoopView(0).w : RENDERWIDTH;
 
                 // von links
                 if (GetRandom(2) == 0) {
-                    m_xPos = TileEngine.XOffset - 160.0f;
-                    m_yPos = TileEngine.YOffset + 200.0f;
+                    m_xPos = left - 160.0f;
                     m_xSpeed = 10.0f;
                 }
 
                 // von rechts
                 else {
-                    m_xPos = TileEngine.XOffset + RENDERWIDTH + 160.0f;
-                    m_yPos = TileEngine.YOffset + 200.0f;
+                    m_xPos = left + width + 160.0f;
                     m_xSpeed = -10.0f;
                 }
 
+                m_yPos = top + 200.0f;
                 m_ySpeed = static_cast<float>(GetRandom(9) - 4) / 5.0f;
             }
         } break;
 
         // fliegen lassen, bis er aus dem Bild ist
         case DragonState::FLY: {
-            bool mirrored = m_xSpeed > 0.0f;
-
-            m_GFX.RenderSprite(m_xPos - TileEngine.XOffset,
-                               m_yPos - TileEngine.YOffset, m_AnimCount, 0xDDFFFFFF, mirrored);
-
             m_xPos += Timer.sync(m_xSpeed);
             m_yPos += Timer.sync(m_ySpeed);
 
             // Ausserhalb des sichtbaren Bereichs? Dann verschwinden lassen
-            if (m_xPos + 260.0f < TileEngine.XOffset || m_xPos - 260.0f > TileEngine.XOffset + RENDERWIDTH ||
-                m_yPos + 240.0f < TileEngine.YOffset || m_yPos - 240.0f > TileEngine.YOffset + RENDERHEIGHT) {
+            if (!TileEngine.IsInPlayerViews(m_xPos - 260.0f, m_yPos - 240.0f, m_xPos + 260.0f, m_yPos + 240.0f, false)) {
                 m_State = DragonState::WAIT;
                 m_AppearCount = GetRandom(100) + 50.0f;
             }
         } break;
     }
+}
+
+void CDragonHack::Draw() {
+    if (m_State == DragonState::FLY)
+        m_GFX.RenderSprite(m_xPos - TileEngine.XOffset, m_yPos - TileEngine.YOffset,
+                           static_cast<int>(m_AnimCount), 0xDDFFFFFF, m_xSpeed > 0.0f);
 }

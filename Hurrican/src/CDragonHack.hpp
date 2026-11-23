@@ -45,6 +45,7 @@ class CDragonHack {
     ~CDragonHack();  // CutScene freigeben
 
     void Run();  // laufen, pardon: "fliegen" lassen
+    void Draw();
     // abgebrochen wurde
 
     inline DragonState GetState() const { return m_State; }

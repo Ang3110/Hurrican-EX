@@ -22,7 +22,9 @@
 #include "DX8Sprite.hpp"
 #include "GegnerClass.hpp"
 
+#include <array>
 #include <bitset>
+#include <cstdint>
 
 // --------------------------------------------------------------------------------------
 // Defines
@@ -50,6 +52,8 @@ constexpr float PLAYER_FLUGSACKSPEED = 4.0f;  // Speed beim Flugsack fliegen
 
 // neue Frames
 constexpr int FRAMES_IDLE = 19;
+constexpr int PLAYER_FRAME_WIDTH = 70;
+constexpr int PLAYER_FRAME_HEIGHT = 80;
 constexpr int FRAMES_RUN = 20;
 constexpr int FRAMES_JUMP = 12;
 constexpr int FRAMES_SURROUND = 36;
@@ -80,7 +84,45 @@ enum {
   AKTION_WAFFE_SPREAD = 12,
   AKTION_WAFFE_LASER = 13,
   AKTION_WAFFE_BOUNCE = 14,
-  MAX_AKTIONEN = 15
+  AKTION_WAFFEN_PREV = 15,
+  ACTION_SUMMARY,
+  ACTION_LOOK_LEFT,
+  ACTION_LOOK_RIGHT,
+  MAX_AKTIONEN
+};
+
+constexpr bool IsDirectionalAction(int action) {
+    return action >= AKTION_LINKS && action <= AKTION_UNTEN;
+}
+
+constexpr PadDirection DefaultPadDirection(int action) {
+    constexpr PadDirection defaults[] = {PadDirection::Left, PadDirection::Right, PadDirection::Down,
+                                         PadDirection::Up, PadDirection::Down};
+    return defaults[action];
+}
+
+enum class BindingKind : int32_t { Empty, Key, Pad };
+
+struct InputBinding {
+    std::string Label(const DirectJoystickClass *pad) const;
+    BindingKind kind = BindingKind::Empty;
+    int32_t code = 0;
+
+    static constexpr InputBinding Key(int key) {
+        return key > 0 ? InputBinding{BindingKind::Key, key} : InputBinding{};
+    }
+    static constexpr InputBinding Pad(int pad) {
+        return pad >= 0 && pad <= LastPadBinding ? InputBinding{BindingKind::Pad, pad} : InputBinding{};
+    }
+    bool Valid() const;
+    bool Overlaps(InputBinding other) const;
+    bool Pressed(const DirectJoystickClass *joystick) const;
+};
+using BindingPair = std::array<InputBinding, 2>;
+using PlayerBindings = std::array<BindingPair, MAX_AKTIONEN>;
+struct ControlLayouts {
+    PlayerBindings keyboard{};
+    PlayerBindings controller{};
 };
 
 constexpr int NUM_COOL_LIGHTNINGS = 18;  // Anzahl der Blitze, aus denen der neue coole Blitz besteht
@@ -140,8 +182,20 @@ class PlayerClass {
     int FlameAnim;      // Welche Schuss Flamme ? (Zufall)
     int randomwert;     // aktueller srand wert
     float changecount;  // zähler, wann die blitze sich ändern
-    bool weaponswitchlock;
+    int lightningPoints = 0;
+    bool nextWeaponHeld = false;
+    bool previousWeaponHeld = false;
     void checkWeaponSwitch();
+    int demoAimDirection = 0;
+    friend void PlayDemo();
+    int DiagonalAim() const;
+    bool AimingUp() const { return Aktion[AKTION_OBEN] || DiagonalAim() != 0; }
+    void UpdateAimPose();
+    void UsePowerline();
+    int blockedWheelSteer = 0;
+    void MoveWheelHorizontally(float target);
+    bool HasStandingClearance() const;
+    uint32_t CheckSlope();
 
     float DamageCounter;        // Wie lange bei Schaden blinken ?
     int PlayerNumber;    // DKS - Added this that indicates whether this
@@ -151,10 +205,10 @@ class PlayerClass {
     bool AlreadyDrawn;
     int SoundOff;
     std::bitset<MAX_AKTIONEN> Aktion;  // Array mit Tasten für Aktionen
-    int AktionKeyboard[MAX_AKTIONEN];  // Array mit Tasten  für Aktionen
-    int AktionJoystick[MAX_AKTIONEN];  // Array mit Buttons für Aktionen
-    bool Walk_UseAxxis;                // true = achsen / false = coolie hat
-    bool Look_UseAxxis;                // true = achsen / false = coolie hat
+    ControlLayouts controls{};
+    const PlayerBindings &BindingsFor(const DirectJoystickClass *pad) const { return pad ? controls.controller : controls.keyboard; }
+    bool ActionPressed(int action, const DirectJoystickClass *joystick) const;
+    std::string BindingName(InputBinding binding) const;
 
     bool CanBeDamaged;  // Kann schaden nehmen? (Nicht nach LevelEnde etc)
 
@@ -224,10 +278,13 @@ class PlayerClass {
     int FesteAktion;       // Was soll der Spieler von alleine Machen?
     bool DoFesteAktion;
     bool StageClearRunning;
+    const DirectJoystickClass *GetJoystick() const;
+    bool UsingJoystick() const { return GetJoystick() != nullptr; }
+    void PlayFeedback(int effect, float intensity = 1.0f) const;
+
     int JoystickIndex;       // Welcher Joystick wird benutzt?
-    float JoystickSchwelle;  // Schwellenwert für Analog Stick
     int ControlType;
-    int JoystickMode;
+    RumbleStrength rumbleStrength = RumbleStrength::Off;
     float ExplodingTimer;
 
     // DKS - Moved the player sprites into the class (they were static globals and
@@ -264,11 +321,13 @@ class PlayerClass {
     void PlayerGrenadeShoot();                                 // Granate ablassen
     void AnimatePlayer();                                      // Spieler animieren
     void MovePlayer();                                         // Spieler mit aktueller Speed bewegen
-    bool DrawPlayer(bool leuchten, bool farbe);                // Spieler zeichnen
-    bool DoLightning();                                        // Blitz animieren und zeichnen
+    void SeparateCoopSpawn(const PlayerClass &partner);
+    bool DrawPlayer(bool leuchten, bool farbe, bool advanceEffects = true);
+    void FinishDrawingFrame();
+    bool DoLightning(bool advanceEffects);                     // Blitz animieren und zeichnen
     void DrawNormalLightning(int DrawLength);                  // Den normalen Blitz rendern
-    void DrawCoolLightning(int DrawLength, float mul = 1.0f);  // Den neuen Blitz rendern =)
-    bool LoadBeam();                                           // Beam aufladen
+    void DrawCoolLightning(int DrawLength, bool advanceEffects, float mul = 1.0f);
+    bool LoadBeam(bool advanceEffects);                        // Beam aufladen
     void DamagePlayer(float amount,                            // Spieler erleidet Schaden
                       bool Override = false);
     void CenterLevel();  // Level auf Spieler zentrieren
@@ -279,6 +338,7 @@ class PlayerClass {
     void checkShoot();          // Spieler will schiessen?
     void handleAutoFire();      // Autofire abhandeln
     void DoStuffWhenDamaged();  // Funken und Rauch, wenn der Spieler wenig Energie hat
+    void CarryPlatform(float distance, float targetY);
     void DoPlattformStuff();    // Auf einer Plattform bewegen
     void CheckForExplode();     // Keine Energy mehr? Dann explodieren
     //void CalcWeaponLevels();

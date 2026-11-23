@@ -43,6 +43,7 @@ constexpr auto invert(DirectionEnum dir) noexcept {
 }
 
 class PlayerClass;
+enum class CoopGateSide;
 
 // --------------------------------------------------------------------------------------
 // Gegner Klasse (Werte für EINEN Gegner)
@@ -55,6 +56,19 @@ class GegnerClass {
     DirectionEnum BlickRichtung;  // Links oder Rechts :)
     float TurnCount;
     bool ChangeLight;   // Licht des Levels annehmen ?
+    bool AdvanceDrawEffects = true;
+    bool DrawnInFirstView = false;
+    bool FollowsGameplayView() const;
+    RECT_struct DrawBounds() const;
+    PlayerClass *VisibleSplitTarget() const;
+    void Activate();
+    void ShakeAtCenter(float strength) const;
+    PlayerClass *firstAttacker = nullptr;
+    int waitingPlayer = -1;
+    CoopGateSide entranceSide{};
+    float entranceLimit = 0.0f;
+    bool CoopArenaReady();
+    void UpdateTileContacts(bool groundMovement = false);
 
   public:
     PlayerClass *pAim;                        // Player to attack
@@ -88,17 +102,19 @@ class GegnerClass {
     virtual void DoKI() {}                                   // Gegner individuell bewegen
     virtual void DoDraw() {}                                 // Gegner individuell rendern (nur bei manchen)
     bool Run();                                              // Gegner bewegen, checken etc
-    void Render();                                           // nur rendern
+    void Render(bool secondView = false);
     int PlayerAbstand(bool both = false) const;                     // Abstand Gegner/Spieler zurückliefern
     int PlayerAbstandHoriz(PlayerClass *pTarget = nullptr) const;   // Nur Horizontaler Abstand
     int PlayerAbstandVert(PlayerClass *pTarget = nullptr) const;    // Nur Vertikaler   Abstand
     void TestDamagePlayers(float dam, bool detroy = false);  // Spieler verletzt?
-    void PlattformTest(RECT_struct rect);                           // Steht der Spieler auf dem Gegner ?
+    void RegisterHit(PlayerClass *source);
+    PlayerClass *PlattformTest(RECT_struct rect);                           // Steht der Spieler auf dem Gegner ?
     void Wegschieben(RECT_struct rect, float dam);                  // Gegner schiebt Spieler beiseite
     void SimpleAnimation(bool backward = false);             // Einfache Animation (loop)
     void TurnonWall();                                       // An der Wand umdrehen?
     bool TurnonShot();                                       // Umdrehen, wenn angeschoßen
-    bool IsOnScreen() const;                                 // Gegner grade sichtbar?
+    bool IsOnScreen() const;
+    bool IsOnScreen(float left, float right, int height) const;
 };
 
 // --------------------------------------------------------------------------------------
@@ -130,7 +146,7 @@ class GegnerListClass {
     void ClearAll();                  // Alle Gegner löschen
     int GetNumGegner() const;         // Zahl der Gegner zurückliefern
     void RunAll();                    // Alle Gegner der Liste animieren
-    void RenderAll();                 // Alle Gegner der Liste rendern
+    void RenderAll(bool secondView = false);
     void DamageEnemiesonScreen(float x,
                                float y,  // Alle Gegner ausgehend von Stelle x/y verwunden (Granate)
                                int MaxDamage);

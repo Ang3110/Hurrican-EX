@@ -53,14 +53,16 @@ class IntroClass {
     // DKS - Horizontal text scrolling now depends on an separate counter that doesn't get reset on skipped lines:
     float HorizCounter;
     float Counter;
+    bool skipArmed = false;
     // DKS - Added dynamically-size vector of text that will actually be displayed on-screen, based on font size:
     std::vector<IntroEntry> entries;
+
+    void EndIntro();
 
   public:
     IntroClass();    // Konstruktor
     ~IntroClass();   // Destruktor
     void DoIntro();  // Intro ablaufen lassen
-    void EndIntro();
 
     bool IsDone() const { return Zustand == IntroStateEnum::DONE; }
 };

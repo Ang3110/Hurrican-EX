@@ -27,6 +27,8 @@
 
 //----- Spielzustände
 
+inline constexpr char HURRICAN_EX_NAME[] = "Hurrican EX";
+
 enum class GameStateEnum {
   CRACKTRO,
   VORSPANN,

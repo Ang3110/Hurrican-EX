@@ -94,47 +94,27 @@ void HUDClass::ShowHUD() {
         // DKS - Note: For the HUD GUI, font scaling is limited to 2, as the numbers need to fit
         pDefaultFont->SetScaleFactor(2);  // Anything more than 2 won't fit, force it
 
-    if (NUMPLAYERS == 1) {
-        float off = floor((MAX_ENERGY - Player[0].Energy) * 69.0f / MAX_ENERGY);
-        HUDBall[0].SetRect(0, off, 69, 69);
-        HUDBall[0].RenderSprite(xpos, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-
-        // Radenergie
-        off = floor((MAX_ARMOUR - Player[0].Armour) * 69.0f / MAX_ARMOUR);
-        HUDBall[1].SetRect(0, off, 69, 69);
-        HUDBall[1].RenderSprite(xpos + 548 - 69, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-    } else
-        for (int num = 0; num < NUMPLAYERS; num++) {
-            PlayerClass *pCurrentPlayer;
-
-            if (num == 0) {
-                pCurrentPlayer = &Player[0];
-
-                float off;
-                // Energy
-                off = floor((MAX_ENERGY - pCurrentPlayer->Energy) / MAX_ENERGY * 69);
-                HUDBall[0].SetRect(0, off, 34, 69);
-                HUDBall[0].RenderSprite(xpos, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-
-                // Radenergie
-                off = floor((MAX_ARMOUR - pCurrentPlayer->Armour) / MAX_ENERGY * 69);
-                HUDBall[1].SetRect(34, off, 69, 69);
-                HUDBall[1].RenderSprite(xpos + 34, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-            } else {
-                pCurrentPlayer = &Player[1];
-
-                float off;
-                // Energy
-                off = floor((MAX_ENERGY - pCurrentPlayer->Energy) / MAX_ENERGY * 69);
-                HUDBall[0].SetRect(0, off, 34, 69);
-                HUDBall[0].RenderSprite(xpos + 548 - 69, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-
-                // Radenergie
-                off = floor((MAX_ARMOUR - pCurrentPlayer->Armour) / MAX_ARMOUR * 69);
-                HUDBall[1].SetRect(34, off, 69, 69);
-                HUDBall[1].RenderSprite(xpos + 548 - 69 + 34, ypos + off, D3DCOLOR_RGBA(255, 255, 255, 255));
-            }
+    const auto drawGauge = [&](DirectGraphicsSprite &sprite, float value, float maximum,
+                               float x, int left, int right) {
+        const int height = sprite.itsYFrameSize;
+        const int top = static_cast<int>(std::floor((maximum - std::clamp(value, 0.0f, maximum)) * height / maximum));
+        if (top < height) {
+            sprite.SetRect(left, top, right, height);
+            sprite.RenderSprite(x + left, ypos + top, 0xFFFFFFFF);
         }
+    };
+    const float rightGauge = xpos + HUDGfx.itsXFrameSize - HUDBall[1].itsXFrameSize;
+    if (NUMPLAYERS == 1) {
+        drawGauge(HUDBall[0], Player[0].Energy, MAX_ENERGY, xpos, 0, HUDBall[0].itsXFrameSize);
+        drawGauge(HUDBall[1], Player[0].Armour, MAX_ARMOUR, rightGauge, 0, HUDBall[1].itsXFrameSize);
+    } else {
+        const int middle = HUDBall[0].itsXFrameSize / 2;
+        for (int p = 0; p < NUMPLAYERS; ++p) {
+            const float x = p == 0 ? xpos : rightGauge;
+            drawGauge(HUDBall[0], Player[p].Energy, MAX_ENERGY, x, 0, middle);
+            drawGauge(HUDBall[1], Player[p].Armour, MAX_ARMOUR, x, middle, HUDBall[1].itsXFrameSize);
+        }
+    }
 
     HUDBlitz.SetRect(0, BlitzOff, 6, 18);
 
@@ -502,10 +482,6 @@ void HUDClass::DoHUD() {
     //
     if (bShowArrow)
         RenderArrow();
-
-    // und evtl wieder rotierten Screen setzen
-    //
-    SetScreenShake();
 }
 
 // --------------------------------------------------------------------------------------

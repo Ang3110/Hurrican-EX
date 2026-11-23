@@ -356,8 +356,12 @@ enum {
 // Funktionen
 // --------------------------------------------------------------------------------------
 
+const char *MenuText(const char *key);
+const std::vector<std::string> &CreditLines(int width);
 bool LoadLanguage(const std::string& filename);           // Bestimmte Sprachdatei laden
-void InitReplacers();                    // Tasten ErsetzungsStrings für die TutorialTexte initialisieren
+using TutorialWord = std::array<std::string, 2>;
+const std::vector<TutorialWord> &TutorialWords(int lesson);
+void InvalidateTutorialText();
 
 // DKS - Added cross-platform language-files handling
 void FindLanguageFiles(const char *path);
@@ -383,7 +387,7 @@ void ReplaceAll(std::string &str, const std::string &from, const std::string &to
 extern std::vector<std::string> LanguageFiles;
 extern std::string ActualLanguage;
 extern char TextArray[TEXT::LASTTEXT][1024];
-extern char s_Replacers[MAX_AKTIONEN * 2][256];
+
 extern char Cheats[MAX_CHEATS][256];
 
 #endif

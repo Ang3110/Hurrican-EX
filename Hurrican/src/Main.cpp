@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 namespace fs = std::filesystem;
@@ -72,11 +73,7 @@ TexturesystemClass Textures;         // DKS - Added Texturesystem class (see DX8
 DirectGraphicsClass DirectGraphics;  // Grafik-Objekt
 DirectInputClass DirectInput;        // Input-Objekt
 TimerClass Timer;                    // Timer Klasse für die Framerate
-#if defined(__AROS__)
-Logdatei Protokoll("T:Game_Log.txt");  // Protokoll Datei
-#else
-Logdatei Protokoll("Game_Log.txt");  // Protokoll Datei
-#endif
+Logdatei Protokoll;
 SoundManagerClass SoundManager;  // Sound Manager
 DirectGraphicsFont *pDefaultFont = new (DirectGraphicsFont);
 DirectGraphicsFont *pMenuFont = new (DirectGraphicsFont);
@@ -114,7 +111,6 @@ GameStateEnum SpielZustand = GameStateEnum::CRACKTRO;  // Aktueller Zustand des 
 void FillCommandLineParams(int argc, char *args[]) {
 
     // Set some sensible defaults
-    CommandLineParams.RunWindowMode = ScreenMode::FULLSCREEN;
     CommandLineParams.Scanlines = false;
     CommandLineParams.ColorBleed = false;
     CommandLineParams.ScreenCurvature = false;
@@ -122,7 +118,6 @@ void FillCommandLineParams(int argc, char *args[]) {
     CommandLineParams.TexFactor = 1;
     CommandLineParams.TexSizeMin = 1024;
     CommandLineParams.ScreenDepth = DEFAULT_SCREENBPP;
-    CommandLineParams.VSync = true;
     CommandLineParams.ShowFPS = false;
     CommandLineParams.AllowNPotTextureSizes = false;
     CommandLineParams.LowRes = false;
@@ -133,12 +128,13 @@ void FillCommandLineParams(int argc, char *args[]) {
     for (int i = 1; i < argc; i++) {
         if ((strstr(args[i], "--help") != nullptr) || (strstr(args[i], "-?") != nullptr) ||
             (strstr(args[i], "-H") != nullptr) || (strstr(args[i], "-h") != nullptr)) {
-            Protokoll << "Hurrican\n";
+            Protokoll << HURRICAN_EX_NAME << '\n';
             Protokoll << "  Usage      : hurrican <arguments>\n";
             Protokoll << "  Arguments\n";
             Protokoll << "  -H,-?, --help           : Show this information\n";
-            Protokoll << "  -W,    --windowmode     : Run in a window, not fullsreen\n";
-            Protokoll << "  -S,    --stretch        : Run fullsreen stretched to fill the whole area\n";
+            Protokoll << "  -W,    --windowmode     : Run in a resizable window\n";
+            Protokoll << "         --classic        : Use the original 4:3 view\n";
+            Protokoll << "  -S,    --stretch        : Stretch the original 4:3 view to fill the screen\n";
             Protokoll << "  -F,    --showfps        : Show the current frames per second\n";
             Protokoll << "  -D x,  --depth x        : Set screen pixel depth to x (16, 24, 32)\n";
             Protokoll << "                            ( Default is " << DEFAULT_SCREENBPP << " )\n";
@@ -172,20 +168,13 @@ void FillCommandLineParams(int argc, char *args[]) {
             Protokoll << "         --arcade         : Enable arcade mode\n";
             Protokoll << std::endl;
             exit(EXIT_SUCCESS);
-        } else if ((strstr(args[i], "--windowmode") != nullptr) || (strstr(args[i], "-W") != nullptr)) {
-            if (CommandLineParams.RunWindowMode == ScreenMode::FULLSCREEN_STRETCHED) {
-                std::cout << "Stretch mode selected, ignoring windowmode" << std::endl;
-            } else {
-                CommandLineParams.RunWindowMode = ScreenMode::WINDOW;
-                std::cout << "Window mode is enabled" << std::endl;
-            }
-        } else if ((strstr(args[i], "--stretch") != nullptr) || (strstr(args[i], "-S") != nullptr)) {
-            if (CommandLineParams.RunWindowMode == ScreenMode::WINDOW) {
-                std::cout << "Window mode selected, ignoring stretch mode" << std::endl;
-            } else {
-                CommandLineParams.RunWindowMode = ScreenMode::FULLSCREEN_STRETCHED;
-                std::cout << "Stretched fullscreen mode is enabled" << std::endl;
-            }
+        } else if (strcmp(args[i], "--classic") == 0) {
+            CommandLineParams.Aspect = DisplayAspect::Classic;
+        } else if (strcmp(args[i], "--windowmode") == 0 || strcmp(args[i], "-W") == 0) {
+            CommandLineParams.Fullscreen = false;
+        } else if (strcmp(args[i], "--stretch") == 0 || strcmp(args[i], "-S") == 0) {
+            CommandLineParams.Fullscreen = true;
+            CommandLineParams.Aspect = DisplayAspect::Stretch;
         } else if ((strstr(args[i], "--showfps") != nullptr) || (strstr(args[i], "-F") != nullptr)) {
             CommandLineParams.ShowFPS = true;
             std::cout << "FPS will be displayed" << std::endl;
@@ -337,8 +326,9 @@ std::string getXdgDir(const char *xdgVar, const char *fallback) {
 // --------------------------------------------------------------------------------------
 // Win-Main Funktion
 // --------------------------------------------------------------------------------------
+#if !SDL_VERSION_ATLEAST(2, 0, 0)
 #undef main
-#define main main
+#endif
 int main(int argc, char *argv[]) {
     GamePaused = false;
 
@@ -351,19 +341,27 @@ int main(int argc, char *argv[]) {
         free(CommandLineParams.DataPath);
         CommandLineParams.DataPath = nullptr;
     } else {
-#  ifdef USE_STORAGE_PATH
-        // A data-files storage path has been specified in the Makefile:
-        g_storage_ext = USE_STORAGE_PATH;
-        // Attempt to locate the dir
-        if (!fs::is_directory(g_storage_ext)) {
-            // Failed, print message and use "." folder as fall-back
-            Protokoll << "ERROR: Failed to locate data directory " << g_storage_ext << std::endl;
-            Protokoll << "\tUsing '.' folder as fallback." << std::endl;
-            g_storage_ext = ".";
+        const auto hasAssets = [](const fs::path &directory) {
+            return fs::is_directory(directory / "data") && fs::is_directory(directory / "lang");
+        };
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+        if (char *path = SDL_GetBasePath()) {
+            const auto executableDirectory = fs::u8path(path).lexically_normal().parent_path();
+            SDL_free(path);
+            if (hasAssets(executableDirectory))
+                g_storage_ext = executableDirectory.u8string();
+            else if (hasAssets(executableDirectory.parent_path()))
+                g_storage_ext = executableDirectory.parent_path().u8string();
         }
-#  else
-        g_storage_ext = ".";
-#  endif
+#endif
+        if (g_storage_ext.empty() && hasAssets("."))
+            g_storage_ext = ".";
+#ifdef USE_STORAGE_PATH
+        if (g_storage_ext.empty() && hasAssets(USE_STORAGE_PATH))
+            g_storage_ext = USE_STORAGE_PATH;
+#endif
+        if (g_storage_ext.empty())
+            g_storage_ext = ".";
     }
 
     // Set game's save path (save games, settings, logs, high-scores, etc)
@@ -379,91 +377,76 @@ int main(int argc, char *argv[]) {
 
         // Makefile is specifying this is a UNIX machine and we should write saves, settings, etc to $XDG_DATA_HOME/hurrican/ dir
         g_save_ext = getXdgDir("XDG_DATA_HOME", "/.local/share/hurrican");
+#  elif defined(_WIN32) && SDL_VERSION_ATLEAST(2, 0, 1)
+        if (char *path = SDL_GetPrefPath("Hurrican", "Hurrican EX")) {
+            g_save_ext = path;
+            SDL_free(path);
+        } else {
+            g_save_ext = ".";
+        }
+        g_config_ext = g_save_ext;
 #  else
         g_save_ext = ".";
         g_config_ext = g_save_ext;
 #  endif  // USE_HOME_DIR
     }
 
+#if defined(__AROS__)
+    Protokoll.OpenFile("T:Game_Log.txt");
+#else
+    Protokoll.OpenFile(g_save_ext + "/Game_Log.txt");
+#endif
+
+    Protokoll << HURRICAN_EX_NAME << std::endl;
     Protokoll << "--> Using external config path '" << g_config_ext << "' <--" << std::endl;
     Protokoll << "--> Using external storage path '" << g_storage_ext << "' <--" << std::endl;
     Protokoll << "--> Using save path '" << g_save_ext << "' <--\n" << std::endl;
 
-    //----- Spiel-Initialisierung
-
     if (!GameInit()) {
         Protokoll << "\n-> GameInit error!\n" << std::endl;
-        GameRunning = false;
-    } else {
-        Protokoll << "\n-> GameInit successful!\n" << std::endl;
+        GameExit();
+        return EXIT_FAILURE;
     }
+    Protokoll << "\n-> GameInit successful!\n" << std::endl;
 
-    //----- Main-Loop
-
+    int exitCode = EXIT_SUCCESS;
     while (GameRunning) {
-        SDL_Event event;
-
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_QUIT:
-                    GameRunning = false;
-                    break;
-                case SDL_JOYDEVICEADDED:
-                case SDL_JOYDEVICEREMOVED:
-                    if (event.type == SDL_JOYDEVICEADDED)
-                        Protokoll << "-> Device added!\n";
-                    else
-                        Protokoll << "-> Device removed!\n";
-                    if (!DirectInput.Init()) {
-                        Protokoll << "\n-> Input Initialization Failure ...!\n";
-                    }
-                    break;
-                default:
-                    break;
-            }
-        }
-
-            // DKS - Exceptions can now be disabled, reducing unnecessary code-bloat:
+        ProcessEvents();
+        if (!GameRunning)
+            break;
 #ifndef USE_NO_EXCEPTIONS
         try
-#endif  // USE_NO_EXCEPTIONS
+#endif
         {
             if (!GamePaused) {
-                // Main Loop
-                Heartbeat();
-
-                // Eingabegeräte updaten
                 DirectInput.UpdateTastatur();
                 DirectInput.UpdateJoysticks();
-                // DirectInput.UpdateMaus(false);
 
-                // Soundchannels updaten
+                if (!Heartbeat()) {
+                    exitCode = EXIT_FAILURE;
+                    break;
+                }
+
                 SoundManager.Update();
-
-                // Timer updaten
                 Timer.update();
 
-                // Feste Framerate ? (Spiel läuft in Zeitlupe, wenn zu langsam)
-                //
                 if (FixedFramerate) {
                     Timer.SetMaxFPS(60);
                     Timer.setSpeedFactor(1.0f / 60.0f * Timer.GetMoveSpeed());
                 }
                 Timer.wait();
 
-                // Bei Demo immer gleichen Speedfaktor setzen
-                //
                 if (DEMORecording || DEMOPlaying)
                     Timer.setSpeedFactor(0.28f);
             }
         }
-            // DKS - Exceptions can now be disabled, reducing unnecessary code-bloat:
 #ifndef USE_NO_EXCEPTIONS
         catch (const char *str) {
             Protokoll << "Failure! Unhandled exception\n" << str << std::endl;
-            GameRunning = false;
+            exitCode = EXIT_FAILURE;
+            break;
         }
-#endif  // USE_NO_EXCEPTIONS
+#endif
     }
 
     //----- Spiel verlassen
@@ -472,15 +455,118 @@ int main(int argc, char *argv[]) {
 
     if (!GameExit()) {
         Protokoll << "-> GameExit Fehler !" << std::endl;
-        GameRunning = false;
+        exitCode = EXIT_FAILURE;
     }
 
     Protokoll << "\n-> Hurrican closed !\n";
     Protokoll << "\nOriginal game: https://www.winterworks.de\n";
-    Protokoll << "This fork: https://github.com/HurricanGame/Hurrican\n";
+    Protokoll << "Upstream SDL port: https://github.com/HurricanGame/Hurrican\n";
     Protokoll << "\n-> logfile end" << std::endl;
 
-    return 0;
+    return exitCode;
+}
+
+void ProcessEvents() {
+    SDL_Event event;
+    bool devicesChanged = false;
+    bool drawableChanged = false;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_QUIT:
+                GameRunning = false;
+                break;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+            case SDL_JOYDEVICEADDED:
+            case SDL_JOYDEVICEREMOVED:
+                devicesChanged = true;
+                break;
+            case SDL_WINDOWEVENT:
+                if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || event.window.event == SDL_WINDOWEVENT_RESTORED
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+                    || event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED
+#endif
+                )
+                    drawableChanged = true;
+                break;
+#endif
+            default:
+                break;
+        }
+    }
+
+    if (devicesChanged) {
+        DirectInput.RefreshJoysticks();
+        if (pMenu)
+            InvalidateTutorialText();
+    }
+    if (drawableChanged)
+        DirectGraphics.SetupFramebuffers();
+}
+
+namespace {
+constexpr int legacyAutomaticLayout = 2;
+
+DisplaySettings LoadDisplaySettings() {
+    DisplaySettings saved;
+    std::ifstream file(fs::u8path(g_config_ext) / "display.cfg");
+    int aspect;
+    if (!(file >> saved.fullscreen >> aspect >> saved.width >> saved.height >> saved.vsync) ||
+        aspect < 0 || aspect >= static_cast<int>(DisplayAspect::Count) ||
+        ((saved.width != 0 || saved.height != 0) &&
+         (saved.width < 320 || saved.height < 240 || saved.width > 16384 || saved.height > 16384))) {
+        saved = DisplaySettings{};
+    } else {
+        saved.aspect = static_cast<DisplayAspect>(aspect);
+        // Skip the old layout column so existing profiles keep their CRT setting.
+        int oldLayout;
+        int crt;
+        if (file >> oldLayout >> crt)
+            saved.crt = crt == 1;
+        int filtering;
+        // Both filtered modes from older profiles map to On.
+        if (file >> filtering)
+            saved.textureFiltering = filtering == 1 || filtering == 2;
+        int splitScreenType;
+        if (file >> splitScreenType && splitScreenType == static_cast<int>(SplitScreenType::OneScreen))
+            saved.splitScreenType = SplitScreenType::OneScreen;
+        int brightness;
+        if (file >> brightness)
+            saved.LoadBrightnessGain(brightness);
+    }
+
+    if (CommandLineParams.Fullscreen)
+        saved.fullscreen = *CommandLineParams.Fullscreen;
+    if (CommandLineParams.Aspect)
+        saved.aspect = *CommandLineParams.Aspect;
+    if (CommandLineParams.VSync)
+        saved.vsync = *CommandLineParams.VSync;
+    if (CommandLineParams.HasCrtEffects())
+        saved.crt = true;
+    return saved;
+}
+}
+
+bool SaveDisplaySettings(const DisplaySettings &settings) {
+    const auto directory = fs::u8path(g_config_ext);
+    const auto serial = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto temporary = directory / ("display-" + std::to_string(serial) + ".tmp");
+    std::ofstream file(temporary);
+    // Keep the old column for builds that still read the layout before CRT.
+    file << settings.fullscreen << ' ' << static_cast<int>(settings.aspect) << ' ' << settings.width << ' '
+         << settings.height << ' ' << settings.vsync << ' ' << legacyAutomaticLayout << ' ' << settings.crt << ' '
+         << settings.textureFiltering << ' ' << static_cast<int>(settings.splitScreenType) << ' '
+         << settings.BrightnessGain() << '\n';
+    file.close();
+    if (!file)
+        return false;
+    std::error_code error;
+    fs::rename(temporary, directory / "display.cfg", error);
+    if (error) {
+        Protokoll << "Could not save display settings: " << error.message() << std::endl;
+        fs::remove(temporary, error);
+        return false;
+    }
+    return true;
 }
 
 // --------------------------------------------------------------------------------------
@@ -519,7 +605,7 @@ bool GameInit() {
     Protokoll << ">--------------------<" << std::endl;
 
     // Direct3D initialisieren
-    if (!DirectGraphics.Init(RENDERWIDTH, RENDERHEIGHT, CommandLineParams.ScreenDepth, CommandLineParams.VSync)) {
+    if (!DirectGraphics.Init(LoadDisplaySettings())) {
         Protokoll << "\n-> Graphics Initialization Failure ...!" << std::endl;
         GameRunning = false;
         return false;
@@ -539,6 +625,11 @@ bool GameInit() {
     // Sound Manager initialisieren
     // pSoundManager = new CSoundManager();
     SoundManager.Init();
+
+    if (!LoadConfig()) {
+        Protokoll << "\n-> No config found. Creating default" << std::endl;
+        CreateDefaultConfig();
+    }
 
     // Splash-Screen nicht mehr anzeigen
     NochKeinFullScreen = false;
@@ -567,12 +658,6 @@ bool GameInit2() {
     // Player[1]->SoundOff = 1;
     // memset(Player[0], 0, sizeof(*Player[0]));
     // memset(Player[1], 0, sizeof(*Player[1]));
-
-    // Konfiguration laden
-    if (!LoadConfig()) {
-        Protokoll << "\n-> No config found. Creating default" << std::endl;
-        CreateDefaultConfig();
-    }
 
     // Menumusik laden und spielen
     SoundManager.LoadSong("menu.it", MUSIC::MENU);
@@ -619,7 +704,7 @@ bool GameInit2() {
     // DKS - Load HUD sprites:
     HUD.LoadSprites();
 
-    InitReplacers();
+    InvalidateTutorialText();
 
     // Sounds laden
     SoundManager.LoadWave("spreadshot.wav", SOUND::SPREADSHOT, false);
@@ -812,6 +897,7 @@ bool GameExit() {
 // --------------------------------------------------------------------------------------
 
 bool Heartbeat() {
+    DirectGraphics.SetInterfaceRendering(SpielZustand != GameStateEnum::GAMELOOP);
     switch (SpielZustand) {
         // Cracktro
         case GameStateEnum::CRACKTRO: {
@@ -844,9 +930,6 @@ bool Heartbeat() {
             // Laufen lassen, bis beendet
             if (!pIntro->IsDone()) {
                 pIntro->DoIntro();
-
-                if (DirectInput.AnyKeyDown() || DirectInput.AnyButtonDown())
-                    pIntro->EndIntro();
             } else {
                 SoundManager.StopSong(MUSIC::INTRO, false);
                 delete (pIntro);
@@ -860,7 +943,8 @@ bool Heartbeat() {
         case GameStateEnum::OUTTRO: {
             pOuttro->DoOuttro();
 
-            if (KeyDown(DIK_ESCAPE))  // Intro beenden ?
+            if (KeyDown(DIK_ESCAPE) || DirectInput.AnyPauseButtonDown() ||
+                DirectInput.MenuJoystick().ButtonEscapePressed())
             {
                 SoundManager.StopSong(MUSIC::OUTTRO, false);
                 delete (pOuttro);
@@ -909,17 +993,17 @@ bool Heartbeat() {
 
 jump:
 
-    DirectGraphics.DisplayBuffer();
-
-    // Screenshot machen
 #ifndef NDEBUG
     if (KeyDown(DIK_F12))
-        DirectGraphics.TakeScreenshot("HurricanShot", RENDERWIDTH, RENDERHEIGHT);
+        DirectGraphics.TakeScreenshot("HurricanShot.bmp");
 
-    // Screenshot machen
     if (KeyDown(DIK_F9))
         GUI.HideBox();
 #endif
+    if (SpielZustand == GameStateEnum::MAINMENU && pMenu && pMenu->AktuellerZustand == MENUZUSTAND_DISPLAY)
+        DirectGraphics.ShowBackBuffer(pMenu->PendingBrightnessGain());
+    else
+        DirectGraphics.DisplayBuffer();
     return true;
 }
 

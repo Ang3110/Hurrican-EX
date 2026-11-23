@@ -24,6 +24,7 @@
 #include "DX8Input.hpp"
 #include "DX8Sound.hpp"
 #include "GUISystem.hpp"
+#include "GetKeyName.hpp"
 #include "Gameplay.hpp"
 #include "Gegner_Helper.hpp"
 #include "Globals.hpp"
@@ -44,6 +45,9 @@ int NewStage;  // Neues Level
 int Skill;     // 0 = easy, 1 = medium, 2 = hard, 3 = Hurrican
 
 constexpr int TUTORIAL_END = 99;
+constexpr int StandingTop = 12;
+constexpr int CrouchingTop = 32;
+constexpr int RollingTop = 40;
 
 // --------------------------------------------------------------------------------------
 // Player-Klasse
@@ -71,14 +75,9 @@ PlayerClass::PlayerClass() {
     FlameAnim = 0;
     randomwert = 0;
     changecount = 0;
-    weaponswitchlock = false;
     GegnerDran = false;
     AlreadyDrawn = false;
     Aktion.reset();
-    memset(AktionKeyboard, 0, sizeof(AktionKeyboard));
-    memset(AktionJoystick, 0, sizeof(AktionJoystick));
-    Walk_UseAxxis = false;
-    Look_UseAxxis = false;
     CanBeDamaged = false;
     GodMode = false;
     WheelMode = false;
@@ -144,9 +143,7 @@ PlayerClass::PlayerClass() {
     DoFesteAktion = false;
     StageClearRunning = false;
     JoystickIndex = 0;
-    JoystickSchwelle = 0;
     ControlType = 0;
-    JoystickMode = 0;
     ExplodingTimer = 0;
 
     SpritesLoaded = false;  // DKS - Added this bool so sprites can be loaded on-demand
@@ -159,9 +156,7 @@ PlayerClass::PlayerClass() {
     Stage = -1;  // Es läuft noch kein Spiel
     NewStage = -1;
     StageClearRunning = false;
-    JoystickSchwelle = 500.0f;
     ControlType = CONTROLTYPE_KEYBOARD;
-    JoystickMode = JOYMODE_JOYPAD;
     JoystickIndex = 0;
     GodMode = false;
     WheelMode = false;
@@ -229,7 +224,6 @@ void PlayerClass::InitPlayer(int player_num) {
     // Spielt der Spieler das TutorialLevel? Dann alle Extra-Waffen auf Null setzen
     //
     if (RunningTutorial) {
-        Skill = SKILL_EASY;
         PowerLines = 0;
         Grenades = 0;
         SmartBombs = 0;
@@ -375,11 +369,6 @@ void PlayerClass::runExplode() {
 
         // oder wird wieder gespanwed
         else if (Lives >= 0) {
-            // Spieler hat kurze Zeit lang Schild
-            // if (Shield <= 0.0f)
-            Projectiles.PushProjectile(xpos, ypos, SHIELDSPAWNER, this);
-            Projectiles.PushProjectile(xpos, ypos, SHIELDSPAWNER2, this);
-
             Shield += 20.0f;
 
             // Energie und Rad-Energie wieder auf voll setzen
@@ -391,11 +380,17 @@ void PlayerClass::runExplode() {
             if (g_Fahrstuhl_yPos > -1.0f) {
                 xpos = TileEngine.XOffset + 320.0f - 35;
                 ypos = g_Fahrstuhl_yPos - CollideRect.bottom - 1;
-                xposold = xpos;  // Alte Position wieder herstellen, wenn der
-                yposold = ypos;  // der Spieler zB einen Abgrund runterfiel
-                JumpxSave = xpos;
-                JumpySave = ypos;
+                xposold = JumpxSave = xpos;
+                yposold = JumpySave = ypos;
             }
+            if (NUMPLAYERS == 2) {
+                const float spawnX = xpos;
+                SeparateCoopSpawn(Player[1 - PlayerNumber]);
+                if (spawnX != xpos)
+                    xposold = JumpxSave = xpos;
+            }
+            Projectiles.PushProjectile(xpos, ypos, SHIELDSPAWNER, this);
+            Projectiles.PushProjectile(xpos, ypos, SHIELDSPAWNER2, this);
         }
 
         if (Lives < -1)
@@ -512,6 +507,112 @@ void PlayerClass::handleAutoFire() {
 // Eingabegeräte abfragen und Spieler entsprechend reagieren lassen
 // --------------------------------------------------------------------------------------
 
+const DirectJoystickClass *PlayerClass::GetJoystick() const {
+    if (ControlType == CONTROLTYPE_JOY || ControlType == CONTROLTYPE_AUTO)
+        return DirectInput.GetJoystick(JoystickIndex);
+    return nullptr;
+}
+
+bool InputBinding::Valid() const {
+    switch (kind) {
+        case BindingKind::Empty: return code == 0;
+        case BindingKind::Pad: return code >= 0 && code <= LastPadBinding;
+        case BindingKind::Key:
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+            return code > 0 && SDL_GetScancodeFromKey(code) != SDL_SCANCODE_UNKNOWN;
+#else
+            return code > 0 && code < SDLK_LAST;
+#endif
+    }
+    return false;
+}
+
+bool InputBinding::Overlaps(InputBinding other) const {
+    if (kind == BindingKind::Empty || other.kind != kind)
+        return false;
+    if (code == other.code)
+        return true;
+    if (kind != BindingKind::Pad)
+        return false;
+    // Old profiles can store a mapped D-pad as a button. Auto directions read
+    // that same D-pad and the left stick, so these assignments also overlap.
+    const auto concrete = [](int value) {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+        if (value >= ControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP) && value <= ControllerButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) {
+            constexpr PadDirection dirs[] = {PadDirection::Up, PadDirection::Down, PadDirection::Left, PadDirection::Right};
+            return PadDirectionBinding(PadDirectionSource::DPad, dirs[value - ControllerButton(SDL_CONTROLLER_BUTTON_DPAD_UP)]);
+        }
+#endif
+        return value;
+    };
+    int a = concrete(code), b = concrete(other.code);
+    if (a == b)
+        return true;
+    if (a > b)
+        std::swap(a, b);
+    if (a < MAX_JOYSTICKBUTTONS || a >= PadDirectionBinding(PadDirectionSource::RightStick, PadDirection::Left))
+        return false;
+    const auto direction = static_cast<PadDirection>((a - MAX_JOYSTICKBUTTONS) % static_cast<int>(PadDirection::Count));
+    return b == AutomaticPadBinding(direction);
+}
+
+bool InputBinding::Pressed(const DirectJoystickClass *joystick) const {
+    if (kind == BindingKind::Key)
+        return KeyDown(code);
+    if (kind != BindingKind::Pad || !joystick)
+        return false;
+    return IsPadDirectionBinding(code) ? joystick->DirectionPressed(code) : joystick->ButtonPressed(code);
+}
+
+bool PlayerClass::ActionPressed(int action, const DirectJoystickClass *joystick) const {
+    for (const auto binding : BindingsFor(joystick)[action]) {
+        if (binding.Pressed(joystick))
+            return true;
+    }
+    return false;
+}
+
+std::string InputBinding::Label(const DirectJoystickClass *pad) const {
+    if (kind == BindingKind::Key) return std::string("[") + MenuText(GetKeyName(code)) + "]";
+    if (kind != BindingKind::Pad) return TextArray[TEXT::NICHT_DEFINIERT];
+    const char *name = IsPadDirectionBinding(code) ? DirectJoystickClass::DirectionName(code) :
+                       pad ? pad->BindingName(code) : nullptr;
+    return "(" + (name ? std::string(MenuText(name)) : std::string(TextArray[TEXT::BUTTON]) + " " +
+                 std::to_string(code + 1)) + ")";
+}
+
+std::string PlayerClass::BindingName(InputBinding binding) const { return binding.Label(GetJoystick()); }
+
+void PlayerClass::PlayFeedback(int effect, float intensity) const {
+    if (const auto *joystick = GetJoystick())
+        joystick->ForceFeedbackEffect(effect, rumbleStrength, intensity);
+}
+
+int PlayerClass::DiagonalAim() const {
+    if (DEMOPlaying)
+        return demoAimDirection;
+    return Aktion[AKTION_OBEN] ? int(Aktion[AKTION_RECHTS]) - int(Aktion[AKTION_LINKS]) : 0;
+}
+
+void PlayerClass::UpdateAimPose() {
+    const bool aimingPose = Handlung == PlayerActionEnum::SCHIESSEN_O || Handlung == PlayerActionEnum::SCHIESSEN_LO ||
+                            Handlung == PlayerActionEnum::SCHIESSEN_RO;
+    if (Handlung != PlayerActionEnum::STEHEN && Handlung != PlayerActionEnum::LAUFEN &&
+        Handlung != PlayerActionEnum::SPRINGEN && !aimingPose)
+        return;
+    const int direction = DiagonalAim();
+    if (direction)
+        Blickrichtung = direction < 0 ? DirectionEnum::LINKS : DirectionEnum::RECHTS;
+    if (Handlung == PlayerActionEnum::SPRINGEN)
+        return;
+    if (direction)
+        Handlung = direction < 0 ? PlayerActionEnum::SCHIESSEN_LO : PlayerActionEnum::SCHIESSEN_RO;
+    else if (Aktion[AKTION_OBEN])
+        Handlung = PlayerActionEnum::SCHIESSEN_O;
+    else if (aimingPose)
+        Handlung = PlayerActionEnum::STEHEN;
+}
+
 bool PlayerClass::GetPlayerInput() {
     // tot?
     if (Handlung == PlayerActionEnum::TOT)
@@ -547,122 +648,14 @@ bool PlayerClass::GetPlayerInput() {
 
         // oder feste Aktion?
         else if (DoFesteAktion) {
-            if (FesteAktion >= 0)
+            if (FesteAktion >= 0 && FesteAktion < MAX_AKTIONEN)
                 Aktion[FesteAktion] = true;
         }
         // oder Spieler spielt ?
         else {
-            // DKS - Cleaned a lot of this up and made the joystick support more complete,
-            //      especially in regards to Walk_UseAxxis and Look_UseAxxis,
-            //      along with safeguarding against checking button inputs on actions that
-            //      are undefined, and not checking the keyboard for actions unless the
-            //      player is set to use it as the control method.
-
-            // Keyboard
-            if (ControlType == CONTROLTYPE_KEYBOARD) {
-                for (int i = 0; i < MAX_AKTIONEN; i++)
-                    if (KeyDown(AktionKeyboard[i])) {
-                        Aktion[i] = true;
-                        BronsonCounter = 0.0f;
-                    }
-            } else if (JoystickIndex >= 0 && JoystickIndex < DirectInput.JoysticksFound &&
-                       DirectInput.Joysticks[JoystickIndex].Active) {
-                bool const stick_right = DirectInput.Joysticks[JoystickIndex].JoystickX > JoystickSchwelle;
-                bool const stick_left = DirectInput.Joysticks[JoystickIndex].JoystickX < -JoystickSchwelle;
-                bool const stick_up = DirectInput.Joysticks[JoystickIndex].JoystickY < -JoystickSchwelle;
-                bool const stick_down = DirectInput.Joysticks[JoystickIndex].JoystickY > JoystickSchwelle;
-                bool hat_right = false;
-                bool hat_left = false;
-                bool hat_up = false;
-                bool hat_down = false;
-
-                if (DirectInput.Joysticks[JoystickIndex].JoystickPOV != -1) {
-                    // HAT switch is pressed
-                    if (DirectInput.Joysticks[JoystickIndex].JoystickPOV >= 4500 * 1 &&
-                        DirectInput.Joysticks[JoystickIndex].JoystickPOV <= 4500 * 3) {
-                        hat_right = true;
-                    } else if (DirectInput.Joysticks[JoystickIndex].JoystickPOV >= 4500 * 5 &&
-                               DirectInput.Joysticks[JoystickIndex].JoystickPOV <= 4500 * 7) {
-                        hat_left = true;
-                    }
-
-                    if (DirectInput.Joysticks[JoystickIndex].JoystickPOV >= 4500 * 3 &&
-                        DirectInput.Joysticks[JoystickIndex].JoystickPOV <= 4500 * 5) {
-                        hat_down = true;
-                    } else if ((DirectInput.Joysticks[JoystickIndex].JoystickPOV >= 4500 * 7 &&
-                                DirectInput.Joysticks[JoystickIndex].JoystickPOV <= 4500 * 8) ||
-                               (DirectInput.Joysticks[JoystickIndex].JoystickPOV >= 0 &&
-                                DirectInput.Joysticks[JoystickIndex].JoystickPOV <= 4500 * 1)) {
-                        hat_up = true;
-                    }
-                }
-
-                // Zum laufen die Achse links/rechts auslesen
-                if (Walk_UseAxxis) {
-                    // Analog stick input used for walking:
-                    if (stick_right)
-                        Aktion[AKTION_RECHTS] = true;
-                    if (stick_left)
-                        Aktion[AKTION_LINKS] = true;
-                    if (stick_down)
-                        Aktion[AKTION_DUCKEN] = true;
-
-                    if (stick_up) {
-                        if (JoystickMode == JOYMODE_JOYSTICK) {
-                            // Analog stick up-input used for jumping (when in "joystick" mode):
-                            // Spieler kann im Joystick Mode nicht mit dem Button springen
-                            //
-                            Aktion[AKTION_JUMP] = true;
-                        } else {
-                            // Analog stick up-input used for looking up (when in "joypad" mode)
-                            Aktion[AKTION_OBEN] = true;
-                        }
-                    }
-                } else {
-                    // HAT/DPAD used for walking:
-                    if (hat_right)
-                        Aktion[AKTION_RECHTS] = true;
-                    if (hat_left)
-                        Aktion[AKTION_LINKS] = true;
-                    if (hat_down)
-                        Aktion[AKTION_DUCKEN] = true;
-
-                    if (hat_up) {
-                        if (JoystickMode == JOYMODE_JOYSTICK) {
-                            // HAT/DPAD up-input used for jumping (when in "joystick" mode):
-                            // Spieler kann im Joystick Mode nicht mit dem Button springen
-                            //
-                            Aktion[AKTION_JUMP] = true;
-                        } else {
-                            // HAT/DPAD up-input used for looking up (when in "joypad" mode)
-                            Aktion[AKTION_OBEN] = true;
-                        }
-                    }
-                }
-
-                if (Look_UseAxxis) {
-                    // Analog stick used for looking:
-                    if (stick_down)
-                        Aktion[AKTION_UNTEN] = true;
-                    else if (stick_up)
-                        Aktion[AKTION_OBEN] = true;
-                } else {
-                    // HAT/DPAD used for looking:
-                    if (hat_down)
-                        Aktion[AKTION_UNTEN] = true;
-                    else if (hat_up)
-                        Aktion[AKTION_OBEN] = true;
-                }
-
-                // Joystick buttons auslesen
-                for (int i = AKTION_LINKS; i <= AKTION_WAFFEN_CYCLE; i++) {
-                    if (AktionJoystick[i] != -1 &&
-                        DirectInput.Joysticks[JoystickIndex].JoystickButtons[AktionJoystick[i]]) {
-                        if (!(i == AKTION_JUMP && JoystickMode == JOYMODE_JOYSTICK))
-                            Aktion[i] = true;
-                    }
-                }
-            }
+            const auto *joystick = GetJoystick();
+            for (int action = 0; action < MAX_AKTIONEN; ++action)
+                Aktion[action] = ActionPressed(action, joystick);
 
             // Bewegungen aufnehmen ?
             if (DEMORecording)
@@ -670,9 +663,11 @@ bool PlayerClass::GetPlayerInput() {
         }
     }
 
+    UpdateAimPose();
+
     // Spieler läuft ins Exit?
 
-    if (Player[0].StageClearRunning)
+    if (StageClearRunning)
         RunPlayerExit();
 
     // Spieler schiesst?
@@ -687,11 +682,9 @@ bool PlayerClass::GetPlayerInput() {
     checkWeaponSwitch();
 
     if (Aktion.any()) {
-        if (Handlung == PlayerActionEnum::PISSEN) {
-            GUI.HideBoxFast();
-            BronsonCounter = 0.0f;
+        BronsonCounter = 0.0f;
+        if (Handlung == PlayerActionEnum::PISSEN)
             Handlung = PlayerActionEnum::STEHEN;
-        }
     }
 
     // Bronson-Counter erhöhen
@@ -816,11 +809,10 @@ void PlayerClass::CheckForExplode() {
         SoundManager.StopWave(SOUND::BLITZ + SoundOff);
         SoundManager.StopWave(SOUND::BEAMLOAD + SoundOff);
 
-        DirectInput.Joysticks[JoystickIndex].StopForceFeedbackEffect(FFE_BLITZ);
+        if (const auto *joystick = GetJoystick())
+            joystick->StopForceFeedbackEffect(FFE_BLITZ);
 
         // Screen bei evtl. Ruckeln begradigen
-        WackelMaximum = 0.0f;
-        WackelValue = 0.0f;
         glm::mat4x4 matRot = glm::mat4x4(1.0f); // Rotationsmatrix
         g_matModelView = matRot * g_matView;
 #if defined(USE_GL1)
@@ -838,12 +830,11 @@ void PlayerClass::CheckForExplode() {
         Gegner.DamageEnemiesonScreen(xpos + 35, ypos + 40, 400);
 
         // Piss-Meldung verschwinden lassen
-        GUI.HideBoxFast();
         BronsonCounter = 0.0f;
 
         Shield = 0.0f;
 
-        ShakeScreen(5);
+        ShakeScreen(5, xpos + 35.0f, ypos + 40.0f);
 
         for (int i = 0; i < 3; i++)
             PartikelSystem.PushPartikel(xpos + 10 + GetRandom(50), ypos + 10 + GetRandom(50), SPLITTER);
@@ -907,7 +898,7 @@ void PlayerClass::CheckForExplode() {
             Handlung = PlayerActionEnum::EXPLODIEREN;
         }
 
-        DirectInput.Joysticks[JoystickIndex].ForceFeedbackEffect(FFE_BIGRUMBLE);
+        PlayFeedback(FFE_BIGRUMBLE);
         InLiquid = false;
     }
 }
@@ -915,6 +906,50 @@ void PlayerClass::CheckForExplode() {
 // --------------------------------------------------------------------------------------
 // Spieler animieren
 // --------------------------------------------------------------------------------------
+
+bool PlayerClass::HasStandingClearance() const {
+    RECT_struct standing = CollideRect;
+    standing.top = StandingTop;
+    return !TileEngine.OverlapsSolidWall(xpos, ypos, standing);
+}
+
+void PlayerClass::MoveWheelHorizontally(float target) {
+    const float start = xpos;
+    if (yspeed >= 0.0f && (bu & (BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R))) {
+        float floor = ypos;
+        if (TileEngine.BlockSlopes(target, floor, CollideRect, 0.0f) &&
+            std::abs(floor - ypos) <= std::abs(target - start) + 2.0f) {
+            // Follow a continuous ramp. Sweep uphill before advancing and downhill after it.
+            const float high = std::min(ypos, floor);
+            if (TileEngine.ClipWallMotion(ypos, high, start, CollideRect, false) == high &&
+                TileEngine.ClipWallMotion(start, target, high, CollideRect, true) == target &&
+                TileEngine.ClipWallMotion(high, floor, target, CollideRect, false) == floor &&
+                !TileEngine.OverlapsSolidWall(target, floor, CollideRect)) {
+                xpos = target;
+                ypos = floor;
+                return;
+            }
+        }
+    }
+    xpos = TileEngine.ClipWallMotion(start, target, ypos, CollideRect, true);
+    if (xpos != target) {
+        // A vertical face can meet a slope. Rebound even while the wheel is still on the ramp.
+        const bool pushingWall = Blickrichtung == DirectionEnum::LINKS ? Aktion[AKTION_LINKS] : Aktion[AKTION_RECHTS];
+        blockedWheelSteer = pushingWall ? Direction::asInt(Blickrichtung) : 0;
+        Blickrichtung = Direction::invert(Blickrichtung);
+        xspeed = -xspeed;
+    }
+}
+
+uint32_t PlayerClass::CheckSlope() {
+    float slopeY = ypos;
+    const auto block = TileEngine.BlockSlopes(xpos, slopeY, CollideRect, yspeed);
+    if (block && !TileEngine.OverlapsSolidWall(xpos, slopeY, CollideRect)) {
+        ypos = slopeY;
+        return block;
+    }
+    return 0;
+}
 
 void PlayerClass::AnimatePlayer() {
     // Pause beim Explodieren
@@ -930,22 +965,37 @@ void PlayerClass::AnimatePlayer() {
 
     bu = 0;
 
-    bl = TileEngine.BlockLinks(xpos, ypos, xposold, yposold, CollideRect, yspeed >= 0.0f);
-    br = TileEngine.BlockRechts(xpos, ypos, xposold, yposold, CollideRect, yspeed >= 0.0f);
+    // Carrying, camera locks and scripted movement can leave a previously valid pose embedded.
+    if (!DoFesteAktion && TileEngine.OverlapsSolidWall(xpos, ypos, CollideRect)) {
+        if (!TileEngine.OverlapsSolidWall(xposold, yposold, CollideRect)) {
+            xpos = xposold;
+            ypos = yposold;
+        } else {
+            const glm::vec2 directions[] = {{0, -1}, {-1, 0}, {1, 0}, {0, 1}};
+            for (int distance = 1; distance <= TILESIZE_X; ++distance) {
+                const auto escape = std::find_if(std::begin(directions), std::end(directions), [&](const glm::vec2 &dir) {
+                    return !TileEngine.OverlapsSolidWall(xpos + dir.x * distance, ypos + dir.y * distance, CollideRect);
+                });
+                if (escape != std::end(directions)) {
+                    xpos += escape->x * distance;
+                    ypos += escape->y * distance;
+                    break;
+                }
+            }
+        }
+    }
 
     // auf schrägen laufen/gelandet?
     //
     if (yspeed >= 0.0f)
-        // DKS - Rewrote BlockSlopes function to only take the parameters it needs:
-        // bu = TileEngine.BlockSlopes     (xpos, ypos, xposold, yposold, CollideRect, yspeed);
-        bu = TileEngine.BlockSlopes(xpos, ypos, CollideRect, yspeed);
+        bu = CheckSlope();
 
     if (Handlung == PlayerActionEnum::RADELN) {
         if ((Blickrichtung == DirectionEnum::LINKS && bu & BLOCKWERT_SCHRAEGE_R) ||
             (Blickrichtung == DirectionEnum::RECHTS && bu & BLOCKWERT_SCHRAEGE_L)) {
             bu = TileEngine.BlockUnten(xpos, ypos, xposold, yposold, CollideRect, yspeed >= 0.0f);
             yspeed = -2.0f;
-            ypos -= 1.0f;
+            ypos = TileEngine.ClipWallMotion(ypos, ypos - 1.0f, xpos, CollideRect, false);
         }
     }
 
@@ -962,7 +1012,10 @@ void PlayerClass::AnimatePlayer() {
         }
     }
 
-    bo = TileEngine.BlockOben(xpos, ypos, xposold, yposold, CollideRect, true);
+    // Probes report contacts. The motion sweeps decide where the player may move.
+    bl = TileEngine.BlockLinks(xpos, ypos, xposold, yposold, CollideRect);
+    br = TileEngine.BlockRechts(xpos, ypos, xposold, yposold, CollideRect);
+    bo = TileEngine.BlockOben(xpos, ypos, xposold, yposold, CollideRect);
 
     // Spieler unter Wasserfall ? Dann Wassertropfen entstehen lassen
     // DKS - Added bounds check for access to Tiles[][] array, eliminated divisions while I was here:
@@ -1031,6 +1084,9 @@ void PlayerClass::AnimatePlayer() {
             Handlung != PlayerActionEnum::SURFENCROUCH &&
             Handlung != PlayerActionEnum::SURFENJUMP &&
             Handlung != PlayerActionEnum::DREHEN) {
+        const bool stayCrouched = CollideRect.top == CrouchingTop && !HasStandingClearance();
+        const bool canCrawl = stayCrouched && !Aktion[AKTION_DUCKEN];
+
         // Stehen animieren?
         if (Handlung == PlayerActionEnum::STEHEN) {
             AnimCount += Timer.sync(1.0f);
@@ -1091,7 +1147,9 @@ void PlayerClass::AnimatePlayer() {
                     // Aktion[AKTION_UNTEN] == false)		// und nicht nach unten zielen ?
                     Handlung = PlayerActionEnum::LAUFEN;  // Dann laufen wir =)
 
-                if (Handlung != PlayerActionEnum::DUCKEN) {
+                if (canCrawl) {
+                    xspeed = -PLAYER_MOVESPEED * 0.5f;
+                } else if (Handlung != PlayerActionEnum::DUCKEN) {
                     if (!InLiquid) {
                         // auf Eis?
                         if (bu & BLOCKWERT_EIS) {
@@ -1110,7 +1168,7 @@ void PlayerClass::AnimatePlayer() {
                         xspeed *= 0.5f;
                 }
 
-                if (Handlung != PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && WalkLock)
+                if (Handlung != PlayerActionEnum::SPRINGEN && AimingUp() && WalkLock)
 
                     xspeed = 0.0f;
             }
@@ -1140,7 +1198,9 @@ void PlayerClass::AnimatePlayer() {
                     // Aktion[AKTION_UNTEN] == false)		// und nicht nach unten zielen ?
                     Handlung = PlayerActionEnum::LAUFEN;  // Dann laufen wir =)
 
-                if (Handlung != PlayerActionEnum::DUCKEN) {
+                if (canCrawl) {
+                    xspeed = PLAYER_MOVESPEED * 0.5f;
+                } else if (Handlung != PlayerActionEnum::DUCKEN) {
                     if (!InLiquid) {
                         // auf Eis?
                         if (bu & BLOCKWERT_EIS) {
@@ -1159,7 +1219,7 @@ void PlayerClass::AnimatePlayer() {
                         xspeed *= 0.5f;
                 }
 
-                if (Handlung != PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && WalkLock)
+                if (Handlung != PlayerActionEnum::SPRINGEN && AimingUp() && WalkLock)
                     xspeed = 0.0f;
             }
         }
@@ -1211,7 +1271,7 @@ void PlayerClass::AnimatePlayer() {
         }
 
         // Springen (nur, wenn nicht schon in der Luft)
-        if (Aktion[AKTION_JUMP] && JumpPossible) {
+        if (Aktion[AKTION_JUMP] && JumpPossible && !stayCrouched) {
             int save = AnimPhase;  // Für Sumpf
 
             SoundManager.StopWave(SOUND::BEAMLOAD + SoundOff);
@@ -1254,8 +1314,7 @@ void PlayerClass::AnimatePlayer() {
 
                 // noch nicht aus dem Sumpf draussen? Dann gleich wieder runterfallen
                 // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-                // bu = TileEngine.BlockSlopes     (xpos, ypos, xposold, yposold, CollideRect, yspeed);
-                bu = TileEngine.BlockSlopes(xpos, ypos, CollideRect, yspeed);
+                bu = CheckSlope();
                 if (bu & BLOCKWERT_SUMPF) {
                     // yspeed = 0.0f;
                     JumpPossible = false;
@@ -1284,8 +1343,7 @@ void PlayerClass::AnimatePlayer() {
                 }
             } else
                 // DKS - Rewrote BlockSlopes function to only take the parameters it uses:
-                // bu = TileEngine.BlockSlopes     (xpos, ypos, xposold, yposold, CollideRect, yspeed);
-                bu = TileEngine.BlockSlopes(xpos, ypos, CollideRect, yspeed);
+                bu = CheckSlope();
 
             if (!JumpPossible && !Aktion[AKTION_JUMP] && yspeed >= 0.0f)
                 JumpPossible = true;
@@ -1322,36 +1380,23 @@ void PlayerClass::AnimatePlayer() {
             JumpySave = ypos;
         }
 
-        // Vom Ducken aufstehen
-        // nur, wenn keine Decke über dem Spieler (wenn er grad mit ner Plattform wo drunter durchfährt z.B.)
-        if (Handlung == PlayerActionEnum::DUCKEN) {
-            float ypos2 = ypos - 48.0f;
-            uint32_t bo2 = TileEngine.BlockOben(xpos, ypos2, xposold, yposold, CollideRect, true);
-
-            if (!(bo & BLOCKWERT_WAND) && !(bo2 & BLOCKWERT_WAND))
+        if (stayCrouched || (Aktion[AKTION_DUCKEN] && JumpPossible &&
+                             Handlung != PlayerActionEnum::BEAMLADEN && Handlung != PlayerActionEnum::BLITZEN)) {
+            Handlung = PlayerActionEnum::DUCKEN;
+            CollideRect.top = CrouchingTop;
+        } else {
+            CollideRect.top = StandingTop;
+            if (Handlung == PlayerActionEnum::DUCKEN)
                 Handlung = PlayerActionEnum::STEHEN;
         }
 
-        CollideRect.top = 12;  // Blockierung wieder wie im Stehen
-
-        // oder gleich wieder geduckt bleiben ?
-        if (Aktion[AKTION_DUCKEN] &&
-                // Aktion[AKTION_LINKS]  == false &&
-                // Aktion[AKTION_RECHTS] == false &&
-                JumpPossible &&
-                Handlung != PlayerActionEnum::BEAMLADEN &&
-                Handlung != PlayerActionEnum::BLITZEN) {
-            Handlung = PlayerActionEnum::DUCKEN;
-            CollideRect.top = 32;  // Im Ducken liegt die obere Blockgrenze tiefer
-        }
-
         // Blitz schiessen ? (nur, wenn am Boden)
-        if (Aktion[AKTION_BLITZ] && JumpPossible) {
+        if (Aktion[AKTION_BLITZ] && JumpPossible && !stayCrouched) {
             // Blitz aufladen?
             if (Aktion[AKTION_SHOOT] && Handlung != PlayerActionEnum::BEAMLADEN) {
                 SoundManager.PlayWave(100, 128, 9000, SOUND::BEAMLOAD + SoundOff);
 
-                DirectInput.Joysticks[JoystickIndex].ForceFeedbackEffect(FFE_BLITZ);
+                PlayFeedback(FFE_BLITZ);
 
                 Handlung = PlayerActionEnum::BEAMLADEN;
                 BlitzStart = 5.0f;
@@ -1411,10 +1456,11 @@ void PlayerClass::AnimatePlayer() {
         // In das Rad verwandeln ?
         if (JumpPossible && Aktion[AKTION_POWERLINE] && Aktion[AKTION_DUCKEN] && Armour > 5.0f) {
             Handlung = PlayerActionEnum::RADELN;
+            blockedWheelSteer = 0;
             AnimPhase = 0;
             AnimCount = 0.0f;
             CollideRect.left = 20;  // Neue Abmessungen für das Rad
-            CollideRect.top = 40;
+            CollideRect.top = RollingTop;
             CollideRect.right = 50;
             CollideRect.bottom = 79;
             PowerLinePossible = false;
@@ -1429,7 +1475,7 @@ void PlayerClass::AnimatePlayer() {
             //        SoundManager.its_Sounds[SOUND::BLITZ + SoundOff]->isPlaying == false)
             if (BlitzStart >= PLAYER_BLITZ_START && !SoundManager.WaveIsPlaying(SOUND::BLITZ + SoundOff)) {
                 SoundManager.PlayWave(100, 128, 11025, SOUND::BLITZ + SoundOff);
-                DirectInput.Joysticks[JoystickIndex].ForceFeedbackEffect(FFE_BLITZ);
+                PlayFeedback(FFE_BLITZ);
             }
         }
         // DKS - Added function WaveIsPlaying() to SoundManagerClass:
@@ -1438,7 +1484,8 @@ void PlayerClass::AnimatePlayer() {
         else if (SoundManager.WaveIsPlaying(SOUND::BLITZ + SoundOff)) {
             SoundManager.StopWave(SOUND::BLITZ + SoundOff);
             SoundManager.PlayWave(100, 128, GetRandom(1000) + 11025, SOUND::BLITZENDE + SoundOff);
-            DirectInput.Joysticks[JoystickIndex].StopForceFeedbackEffect(FFE_BLITZ);
+            if (const auto *joystick = GetJoystick())
+                joystick->StopForceFeedbackEffect(FFE_BLITZ);
         }
 
         // Spieler nach BlitzRichtung ausrichten
@@ -1485,7 +1532,8 @@ void PlayerClass::AnimatePlayer() {
             if (!Aktion[AKTION_BLITZ] || !Aktion[AKTION_SHOOT]) {
                 Handlung = PlayerActionEnum::STEHEN;
                 SoundManager.StopWave(SOUND::BEAMLOAD + SoundOff);
-                DirectInput.Joysticks[JoystickIndex].StopForceFeedbackEffect(FFE_BLITZ);
+                if (const auto *joystick = GetJoystick())
+                    joystick->StopForceFeedbackEffect(FFE_BLITZ);
 
                 if (BlitzStart >= 20.0f) {
                     Projectiles.PushBlitzBeam(static_cast<int>(BlitzStart), BlitzWinkel, this);
@@ -1540,19 +1588,7 @@ void PlayerClass::AnimatePlayer() {
 
         // Powerline schiessen ?
         if (Aktion[AKTION_POWERLINE] && PowerLinePossible && PowerLines > 0) {
-            SoundManager.PlayWave(100, 128, 11025, SOUND::POWERLINE);
-            PowerLinePossible = false;  // Taste einrasten
-            PowerLines--;               // Powerlines verringern
-
-            for (int i = -1; i < 25; i++)  // Powerlines schiessen
-            {
-                Projectiles.PushProjectile(xpos + 20.0f, 
-                                           static_cast<float>(static_cast<int>(TileEngine.YOffset / 20.0f) * 20 + i * 20), POWERLINE,
-                                           this);
-                Projectiles.PushProjectile(xpos + 20.0f,
-                                           static_cast<float>(static_cast<int>(TileEngine.YOffset / 20.0f) * 20 + i * 20), POWERLINE2,
-                                           this);
-            }
+            UsePowerline();
         }
 
         // SmartBomb abfeuern ?
@@ -1568,32 +1604,16 @@ void PlayerClass::AnimatePlayer() {
         if (!Aktion[AKTION_POWERLINE] && !Aktion[AKTION_SMARTBOMB])
             PowerLinePossible = true;
 
-        // Ja nach Blickrichtung in die richtige Richtung scrollen
-        if (Blickrichtung == DirectionEnum::LINKS && (!(bl & BLOCKWERT_WAND))) {
-            if (!InLiquid)
-                xspeed = -40.0f;
-            else
-                xspeed = -30.0f;
-        } else if (Blickrichtung == DirectionEnum::RECHTS && (!(br & BLOCKWERT_WAND))) {
-            if (!InLiquid)
-                xspeed = 40.0f;
-            else
-                xspeed = 30.0f;
-        }
+        const bool supported = AufPlattform || (bu & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM |
+                                                        BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R));
+        const int steer = int(Aktion[AKTION_RECHTS]) - int(Aktion[AKTION_LINKS]);
+        // Continuing to hold toward the wall must not cancel a rebound on the next tick.
+        if (steer != blockedWheelSteer)
+            blockedWheelSteer = 0;
+        if ((Handlung == PlayerActionEnum::RADELN || supported) && steer && !blockedWheelSteer)
+            Blickrichtung = steer < 0 ? DirectionEnum::LINKS : DirectionEnum::RECHTS;
 
-        if (Aktion[AKTION_LINKS] &&  // Nach Links rollen ?
-            (Handlung == PlayerActionEnum::RADELN ||   // Nur wenn man Boden unter den Füßen hat
-             AufPlattform != nullptr || bu & BLOCKWERT_WAND || bu & BLOCKWERT_PLATTFORM))
-            Blickrichtung = DirectionEnum::LINKS;
-
-        if (Aktion[AKTION_RECHTS] &&  // Nach Rechts rollen ?
-            (Handlung == PlayerActionEnum::RADELN ||    // Nur wenn man Boden unter den Füßen hat
-             AufPlattform != nullptr || bu & BLOCKWERT_WAND || bu & BLOCKWERT_PLATTFORM))
-            Blickrichtung = DirectionEnum::RECHTS;
-
-        if (Handlung != PlayerActionEnum::RADELN_FALL &&
-                (!(bu & BLOCKWERT_SCHRAEGE_R)) && (!(bu & BLOCKWERT_SCHRAEGE_L)) &&
-                (!(bu & BLOCKWERT_WAND)) && (!(bu & BLOCKWERT_PLATTFORM))) {
+        if (Handlung != PlayerActionEnum::RADELN_FALL && !supported) {
             Handlung = PlayerActionEnum::RADELN_FALL;
             yspeed = 0.5f;
             JumpAdd = PLAYER_JUMPADDSPEED;
@@ -1622,23 +1642,11 @@ void PlayerClass::AnimatePlayer() {
             }
         }
 
-        // An die Wand gestossen ? Dann Richtung umkehren
-        if (!(bu & BLOCKWERT_SCHRAEGE_R) && !(bu & BLOCKWERT_SCHRAEGE_L)) {
-            if (Blickrichtung == DirectionEnum::RECHTS && (br & BLOCKWERT_WAND))
-                Blickrichtung = DirectionEnum::LINKS;
+        const float rollSpeed = InLiquid ? 30.0f : 40.0f;
+        xspeed = rollSpeed * Direction::asInt(Blickrichtung);
 
-            if (Blickrichtung == DirectionEnum::LINKS && (bl & BLOCKWERT_WAND))
-                Blickrichtung = DirectionEnum::RECHTS;
-        }
-
-        // Aufhören zu kullern und zurückverwandeln, wenn man springt oder keine Energie mehr hat
-        // funktiomiert nur, wenn über einem keine Wand ist. Dabei wird noch ein Teil mehr gecheckt, als
-        // das Rad hoch ist, damit man den Zustand prüft, als wenn der Spieler wieder stehen würde
-
-        float ypos2 = ypos - 20.0f;
-        uint32_t bo2 = TileEngine.BlockOben(xpos, ypos2, xposold, yposold, CollideRect, true);
-
-        if ((Armour <= 0.0f || Aktion[AKTION_JUMP]) && !(bo & BLOCKWERT_WAND) && !(bo2 & BLOCKWERT_WAND)) {
+        // Stay rolled while under an overhang, including after the armor runs out.
+        if ((Armour <= 0.0f || Aktion[AKTION_JUMP]) && HasStandingClearance()) {
             AnimPhase = 0;
 
             // Am Boden zurückverwandelt ?
@@ -1649,10 +1657,7 @@ void PlayerClass::AnimatePlayer() {
             else
                 Handlung = PlayerActionEnum::SPRINGEN;  // Nein, dann in der Luft
 
-            CollideRect.left = 20;
-            CollideRect.top = 12;
-            CollideRect.right = 50;
-            CollideRect.bottom = 79;
+            CollideRect.top = StandingTop;
             if (Armour < 0.0f)
                 Armour = 0.0f;
         }
@@ -1932,17 +1937,7 @@ void PlayerClass::AnimatePlayer() {
 
     if (Aktion[AKTION_POWERLINE] == true && Aktion[AKTION_DUCKEN] == false && PowerLinePossible == true &&
         PowerLines > 0) {
-        SoundManager.PlayWave(100, 128, 11025, SOUND::POWERLINE);
-        PowerLinePossible = false;  // Taste einrasten
-        PowerLines--;               // Powerlines verringern
-
-        for (int i = -1; i < 25; i++)  // Powerlines schiessen
-        {
-            Projectiles.PushProjectile(xpos + 20,
-                                       static_cast<float>(static_cast<int>(TileEngine.YOffset / 20.0f) * 20 + i * 20), POWERLINE, this);
-            Projectiles.PushProjectile(xpos + 20,
-                                       static_cast<float>(static_cast<int>(TileEngine.YOffset / 20.0f) * 20 + i * 20), POWERLINE2, this);
-        }
+        UsePowerline();
     }
 
     //---------------------
@@ -1968,23 +1963,7 @@ void PlayerClass::AnimatePlayer() {
     // Hoch / runter kucken bzw. zielen
     // --------------------------------
 
-    // nach oben zielen
-    if (Aktion[AKTION_OBEN]) {
-        if (Handlung == PlayerActionEnum::STEHEN ||
-                Handlung == PlayerActionEnum::SCHIESSEN_O ||
-                Handlung == PlayerActionEnum::SCHIESSEN_LO ||
-                Handlung == PlayerActionEnum::SCHIESSEN_RO ||
-                Handlung == PlayerActionEnum::LAUFEN) {
-            if (Aktion[AKTION_LINKS]) {
-                Handlung = PlayerActionEnum::SCHIESSEN_LO;
-                Blickrichtung = DirectionEnum::LINKS;
-            } else if (Aktion[AKTION_RECHTS]) {
-                Handlung = PlayerActionEnum::SCHIESSEN_RO;
-                Blickrichtung = DirectionEnum::RECHTS;
-            } else
-                Handlung = PlayerActionEnum::SCHIESSEN_O;
-        }
-    }
+    UpdateAimPose();
 
     if ((!Aktion[AKTION_OBEN] && !Aktion[AKTION_UNTEN]) ||
             NUMPLAYERS == 2 || TileEngine.Zustand != TileStateEnum::SCROLLBAR)
@@ -2016,7 +1995,7 @@ void PlayerClass::AnimatePlayer() {
             if (Aktion[AKTION_UNTEN]) {
                 look += Timer.sync(1.0f);
 
-                if (look > 5.0f || AktionKeyboard[AKTION_UNTEN] != AktionKeyboard[AKTION_DUCKEN]) {
+                if (look > 5.0f || !Aktion[AKTION_DUCKEN]) {
                     if (TileEngine.YOffset < ypos - 40.0f)
                         TileEngine.YOffset += Timer.sync(19.0f);
                     else
@@ -2205,6 +2184,11 @@ void PlayerClass::AnimatePlayer() {
         }
     }
 
+    const auto moveVertically = [this](float distance) {
+        const float target = ypos + distance;
+        ypos = DoFesteAktion ? target : TileEngine.ClipVerticalMotion(ypos, target, xpos, CollideRect);
+    };
+
     // Springen
     if (Handlung == PlayerActionEnum::SPRINGEN || (Handlung == PlayerActionEnum::BLITZEN && yspeed > 0.0f)) {
         // Sprung-Geschwindigkeit manipulieren
@@ -2213,11 +2197,7 @@ void PlayerClass::AnimatePlayer() {
         else
             yspeed += Timer.sync(JumpAdd * 2.0f / 3.0f);
 
-        // y-Position manipulieren, wenn oben frei ist
-        if (InLiquid == false)
-            ypos += Timer.sync(yspeed);
-        else
-            ypos += Timer.sync(yspeed * 2.0f / 3.0f);
+        moveVertically(Timer.sync(yspeed * (InLiquid ? 2.0f / 3.0f : 1.0f)));
 
         if (yspeed > PLAYER_MAXJUMPSPEED)  // Schnellste "Fall-Geschwindigkeit" erreicht ?
             yspeed = PLAYER_MAXJUMPSPEED;
@@ -2249,11 +2229,7 @@ void PlayerClass::AnimatePlayer() {
         else
             yspeed += Timer.sync(JumpAdd * 2.0f / 3.0f);
 
-        // y-Position manipulieren, wenn oben frei ist
-        if (InLiquid == false)
-            ypos += Timer.sync(yspeed);
-        else
-            ypos += Timer.sync(yspeed * 2.0f / 3.0f);
+        moveVertically(Timer.sync(yspeed * (InLiquid ? 2.0f / 3.0f : 1.0f)));
 
         if (yspeed > PLAYER_MAXJUMPSPEED)  // Schnellste "Fall-Geschwindigkeit" erreicht ?
             yspeed = PLAYER_MAXJUMPSPEED;
@@ -2273,15 +2249,31 @@ void PlayerClass::AnimatePlayer() {
     // Level abhängig von der Spieler-Position scrollen
     if (xspeed != 0.0f) {
         // nur bewegen, wenn keine Wand im Weg ist
-        if ((xspeed < 0.0f && !(bl & BLOCKWERT_WAND)) || (xspeed > 0.0f && !(br & BLOCKWERT_WAND)))
-            xpos += Timer.sync(xspeed);  // Spieler bewegen*/
+        const float target = xpos + Timer.sync(xspeed);
+        if (DoFesteAktion) {
+            xpos = target;
+        } else if (Handlung == PlayerActionEnum::RADELN || Handlung == PlayerActionEnum::RADELN_FALL) {
+            MoveWheelHorizontally(target);
+        } else {
+            const float start = xpos;
+            xpos = TileEngine.ClipWallMotion(start, target, ypos, CollideRect, true);
+            if (yspeed >= 0.0f && xpos != start && (bu & (BLOCKWERT_SCHRAEGE_L | BLOCKWERT_SCHRAEGE_R))) {
+                float slopeY = ypos;
+                if (TileEngine.BlockSlopes(xpos, slopeY, CollideRect, 0.0f) &&
+                    std::abs(slopeY - ypos) <= std::abs(xpos - start) + 2.0f) {
+                    if (!TileEngine.OverlapsSolidWall(xpos, slopeY, CollideRect))
+                        ypos = slopeY;
+                    else if (slopeY < ypos)
+                        xpos = start;
+                }
+            }
+        }
 
         // Zwei Spieler Mode? Dann auf Screen beschränken
-        if (NUMPLAYERS == 2 && StageClearRunning == false) {
-            if (xpos < TileEngine.XOffset)
-                xpos = TileEngine.XOffset;
-            if (xpos > TileEngine.XOffset + 570.0f)
-                xpos = TileEngine.XOffset + 570.0f;
+        if (NUMPLAYERS == 2 && !TileEngine.HasFreeCoopCamera() && !StageClearRunning) {
+            const bool wide = TileEngine.HasWideBossArena() || TileEngine.LevelSplitScreenType() == SplitScreenType::OneScreen;
+            const auto bounds = TileEngine.HorizontalPlayfieldAt(TileEngine.XOffset, wide);
+            xpos = std::clamp(xpos, bounds.left, bounds.right - PLAYER_FRAME_WIDTH);
         }
     }
 
@@ -2338,6 +2330,15 @@ void PlayerClass::AnimatePlayer() {
 // Aktionen, wenn der Spieler auf einer Plattform steht
 // --------------------------------------------------------------------------------------
 
+void PlayerClass::CarryPlatform(float distance, float targetY) {
+    xpos = TileEngine.ClipWallMotion(xpos, xpos + distance, ypos, CollideRect, true);
+    const float safeY = TileEngine.ClipVerticalMotion(ypos, targetY, xpos, CollideRect);
+    if (!TileEngine.OverlapsSolidWall(xpos, safeY, CollideRect))
+        ypos = safeY;
+    if (std::abs(ypos - targetY) > 0.001f)
+        AufPlattform = nullptr;
+}
+
 void PlayerClass::DoPlattformStuff() {
     if (AufPlattform == nullptr)
         return;
@@ -2357,10 +2358,9 @@ void PlayerClass::DoPlattformStuff() {
     if (bu & BLOCKWERT_WAND || bu & BLOCKWERT_PLATTFORM) {
         AufPlattform = nullptr;
     } else {
-        if (AufPlattform->GegnerArt == FAHRSTUHL)
-            ypos = g_Fahrstuhl_yPos + GegnerRect[AufPlattform->GegnerArt].top - CollideRect.bottom;
-        else
-            ypos = AufPlattform->yPos + GegnerRect[AufPlattform->GegnerArt].top - CollideRect.bottom;
+        const bool movingLift = AufPlattform->GegnerArt == FAHRSTUHL && g_Fahrstuhl_yPos >= 0.0f;
+        const float platformY = movingLift ? g_Fahrstuhl_yPos : AufPlattform->yPos;
+        CarryPlatform(0.0f, platformY + GegnerRect[AufPlattform->GegnerArt].top - CollideRect.bottom);
     }
 }
 
@@ -2371,7 +2371,7 @@ void PlayerClass::DoPlattformStuff() {
 //  farbe    : mit Farbe "CurrentColor" rendern
 // --------------------------------------------------------------------------------------
 
-bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
+bool PlayerClass::DrawPlayer(bool leuchten, bool farbe, bool advanceEffects) {
     if (Energy <= 0.0f && Handlung == PlayerActionEnum::TOT)
         return false;
 
@@ -2400,18 +2400,11 @@ bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
 #endif  // 0
 
     // Schaden genommen ? Dann Spieler blinken lassen
-    if (DamageCounter > 0.0f)
-        DamageCounter -= Timer.sync(5.0f);
-    else
-        DamageCounter = 0.0f;
-
-    // DKS - No need to check if it is playing, just ask it to stop:
-    // if (DamageCounter == 0.0f &&
-    //        true == SoundManager.InitSuccessfull &&
-    //        SoundManager.its_Sounds[SOUND::ABZUG + SoundOff]->isPlaying == true)
-    //    SoundManager.StopWave(SOUND::ABZUG + SoundOff);
-    if (DamageCounter == 0.0f)
-        SoundManager.StopWave(SOUND::ABZUG + SoundOff);
+    if (advanceEffects) {
+        DamageCounter = DamageCounter > 0.0f ? DamageCounter - Timer.sync(5.0f) : 0.0f;
+        if (DamageCounter == 0.0f)
+            SoundManager.StopWave(SOUND::ABZUG + SoundOff);
+    }
 
     D3DCOLOR Color = TileEngine.LightValue(xpos, ypos, CollideRect, false);
 
@@ -2526,8 +2519,8 @@ bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
 
             // Spieler springt
         case PlayerActionEnum::SPRINGEN: {
-            if (Aktion[AKTION_OBEN]) {
-                if (Aktion[AKTION_LINKS] || Aktion[AKTION_RECHTS])
+            if (AimingUp()) {
+                if (DiagonalAim())
                     PlayerJumpDiagonal.RenderSprite(xdraw, ydraw, AnimPhase, Color, !blick);
                 else
                     PlayerJumpUp.RenderSprite(xdraw, ydraw, AnimPhase, Color, !blick);
@@ -2582,7 +2575,6 @@ bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
     {
         // Zeit der Darstellung verringern
         //
-        FlameTime -= Timer.getSpeedFactor();
 
         DirectGraphics.SetAdditiveMode();
         CalcFlamePos();
@@ -2633,17 +2625,17 @@ bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
     // Blitz anzeigen oder Beam aufladen
     //
     if (Handlung == PlayerActionEnum::BLITZEN && AlreadyDrawn == false)
-        DoLightning();
+        DoLightning(advanceEffects);
 
     if (Handlung == PlayerActionEnum::BEAMLADEN && AlreadyDrawn == false)
-        LoadBeam();
+        LoadBeam(advanceEffects);
 
     if (leuchten)
         DirectGraphics.SetColorKeyMode();
 
     // Funken und so Kram, wenn der Spieler verwundet ist
     //
-    if (Console.Showing == false)
+    if (advanceEffects && !Console.Showing)
         DoStuffWhenDamaged();
 
     CurrentShotTexture = 0;
@@ -2654,9 +2646,49 @@ bool PlayerClass::DrawPlayer(bool leuchten, bool farbe) {
     return true;
 }
 
+void PlayerClass::FinishDrawingFrame() {
+    if (FlameTime > 0.0f)
+        FlameTime -= Timer.getSpeedFactor();
+    if (BlinkCounter > 0.0f)
+        BlinkCounter -= Timer.sync(0.5f);
+}
+
 // --------------------------------------------------------------------------------------
 // Spieler mit aktueller Speed bewegen
 // --------------------------------------------------------------------------------------
+
+void PlayerClass::SeparateCoopSpawn(const PlayerClass &partner) {
+    if (!CoopPlayerReady(partner))
+        return;
+    const auto overlapsPartner = [&](float x) {
+        return x + CollideRect.left < partner.xpos + partner.CollideRect.right + 4 &&
+               x + CollideRect.right > partner.xpos + partner.CollideRect.left - 4 &&
+               ypos + CollideRect.top < partner.ypos + partner.CollideRect.bottom &&
+               ypos + CollideRect.bottom > partner.ypos + partner.CollideRect.top;
+    };
+    if (!overlapsPartner(xpos))
+        return;
+
+    // Prefer a supported spot on the same ledge. Airborne starts can use open air.
+    float fallback = xpos;
+    const int preferredSide = PlayerNumber == 0 ? -1 : 1;
+    for (int distance = 2 * TILESIZE_X; distance <= 6 * TILESIZE_X; distance += TILESIZE_X / 2) {
+        for (int side : {preferredSide, -preferredSide}) {
+            const float x = xpos + side * distance;
+            if (x < 0 || x + PLAYER_FRAME_WIDTH > TileEngine.LEVELPIXELSIZE_X || overlapsPartner(x) ||
+                TileEngine.OverlapsSolidWall(x, ypos, CollideRect) ||
+                TileEngine.ClipWallMotion(xpos, x, ypos, CollideRect, true) != x)
+                continue;
+            if (TileEngine.ClipVerticalMotion(ypos, ypos + TILESIZE_Y, x, CollideRect) < ypos + TILESIZE_Y) {
+                xpos = x;
+                return;
+            }
+            if (fallback == xpos)
+                fallback = x;
+        }
+    }
+    xpos = fallback;
+}
 
 void PlayerClass::MovePlayer() {
     // wenn der Spieler gerade fernegesteuert das Level verlässt dann gleich wieder raus
@@ -2676,30 +2708,17 @@ void PlayerClass::MovePlayer() {
     if (ypos > TileEngine.LEVELPIXELSIZE_Y)
         Energy = 0.0f;
 
-    // im 2 Spieler-Mode: Ein Spieler fällt aus dem Screen?
-    // Geht nur, wenn beide noch leben
-    //
-    if (NUMPLAYERS == 2 && Player[0].Handlung !=PlayerActionEnum:: TOT &&
-            Player[1].Handlung != PlayerActionEnum::TOT) {
-        PlayerClass *pVictim = nullptr;
-        PlayerClass *pSurvivor = nullptr;
-
-        // Spieler 1 fällt unten raus?
-        if (Player[0].ypos > Player[1].ypos + RENDERHEIGHT) {
-            pVictim = &Player[0];
-            pSurvivor = &Player[1];
-        }
-
-        // Spieler 2 fällt unten raus?
-        if (Player[1].ypos > Player[0].ypos + RENDERHEIGHT) {
-            pVictim = &Player[1];
-            pSurvivor = &Player[0];
-        }
-
-        // Einer der Spieler fällt raus
-        if (pVictim != nullptr) {
-            pVictim->xpos = pSurvivor->xpos;
-            pVictim->ypos = pSurvivor->ypos - 20.0f;
+    // A scripted sequence can force the Dynamic camera back to one view.
+    if (TileEngine.LevelSplitScreenType() == SplitScreenType::Dynamic && CoopNeedsPartner() &&
+        !TileEngine.HasFreeCoopCamera()) {
+        const auto &partner = Player[1 - PlayerNumber];
+        if (CoopPlayerReady(partner) && ypos > partner.ypos + RENDERHEIGHT) {
+            xpos = partner.xpos;
+            ypos = partner.ypos;
+            SeparateCoopSpawn(partner);
+            xposold = xpos;
+            yposold = ypos;
+            yspeed = 0.0f;
         }
     }
 
@@ -2713,10 +2732,11 @@ void PlayerClass::MovePlayer() {
 
     // Ränder für gelockten Screen prüfen
     if (TileEngine.Zustand != TileStateEnum::SCROLLBAR) {
-        if (xpos < TileEngine.XOffset)
-            xpos = TileEngine.XOffset;
-        if (xpos > TileEngine.XOffset + 580.0f)
-            xpos = TileEngine.XOffset + 580.0f;
+        const bool oneScreen = NUMPLAYERS == 2 && TileEngine.LevelSplitScreenType() == SplitScreenType::OneScreen;
+        const bool wide = oneScreen || TileEngine.HasWideBossArena();
+        const auto bounds = TileEngine.HorizontalPlayfieldAt(TileEngine.XOffset, wide);
+        const float rightInset = wide ? PLAYER_FRAME_WIDTH : 60.0f;
+        xpos = std::clamp(xpos, bounds.left, bounds.right - rightInset);
 
         // Im Fahrstuhllevel?
         //
@@ -2730,6 +2750,21 @@ void PlayerClass::MovePlayer() {
             if (ypos < TileEngine.YOffset)
                 ypos = TileEngine.YOffset;
         }
+    }
+}
+
+void PlayerClass::UsePowerline() {
+    SoundManager.PlayWave(100, 128, 11025, SOUND::POWERLINE);
+    PowerLinePossible = false;
+    --PowerLines;
+
+    const float top = TileEngine.IsCoopSplit() ? std::max(0.0f, ypos + 40.0f - RENDERHEIGHT / 2)
+                                               : TileEngine.YOffset;
+    const int firstRow = static_cast<int>(top) / TILESIZE_Y - 1;
+    for (int row = firstRow; row < firstRow + RENDERHEIGHT / TILESIZE_Y + 2; ++row) {
+        const float y = static_cast<float>(row * TILESIZE_Y);
+        Projectiles.PushProjectile(xpos + 20.0f, y, POWERLINE, this);
+        Projectiles.PushProjectile(xpos + 20.0f, y, POWERLINE2, this);
     }
 }
 
@@ -2769,8 +2804,7 @@ void PlayerClass::PlayerShoot() {
     // Hurri zielt nach oben
     //
     if (Handlung == PlayerActionEnum::SCHIESSEN_O ||
-        (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] &&
-        !Aktion[AKTION_LINKS] && !Aktion[AKTION_RECHTS])) {
+        (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && !DiagonalAim())) {
         if (Blickrichtung == DirectionEnum::LINKS)
             wadd = 90.0f;
         else
@@ -2780,14 +2814,14 @@ void PlayerClass::PlayerShoot() {
         // Hurri zielt nach links oben
         //
         if (Handlung == PlayerActionEnum::SCHIESSEN_LO ||
-            (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && Aktion[AKTION_LINKS]))
+            (Handlung == PlayerActionEnum::SPRINGEN && DiagonalAim() < 0))
         wadd = 45.0f;
     else
 
         // Hurri zielt nach rechts oben
         //
         if (Handlung == PlayerActionEnum::SCHIESSEN_RO ||
-            (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && Aktion[AKTION_RECHTS]))
+            (Handlung == PlayerActionEnum::SPRINGEN && DiagonalAim() > 0))
         wadd = -45.0f;
 
     if (Handlung != PlayerActionEnum::RADELN &&  // Normal schiessen ?
@@ -3280,7 +3314,7 @@ void PlayerClass::PlayerGrenadeShoot() {
     //
     if (Handlung == PlayerActionEnum::SCHIESSEN_O ||
             (Handlung == PlayerActionEnum::SPRINGEN &&
-            Aktion[AKTION_OBEN] && !Aktion[AKTION_LINKS] && !Aktion[AKTION_RECHTS])) {
+            Aktion[AKTION_OBEN] && !DiagonalAim())) {
         if (Blickrichtung == DirectionEnum::LINKS)
             wadd = 90.0f;
         else
@@ -3290,14 +3324,14 @@ void PlayerClass::PlayerGrenadeShoot() {
         // Hurri zielt nach links oben
         //
         if (Handlung == PlayerActionEnum::SCHIESSEN_LO ||
-            (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && Aktion[AKTION_LINKS]))
+            (Handlung == PlayerActionEnum::SPRINGEN && DiagonalAim() < 0))
         wadd = 45.0f;
     else
 
         // Hurri zielt nach rechts oben
         //
         if (Handlung == PlayerActionEnum::SCHIESSEN_RO ||
-            (Handlung == PlayerActionEnum::SPRINGEN && Aktion[AKTION_OBEN] && Aktion[AKTION_RECHTS]))
+            (Handlung == PlayerActionEnum::SPRINGEN && DiagonalAim() > 0))
         wadd = -45.0f;
 
     WinkelUebergabe = 90.0f + wadd;
@@ -3395,31 +3429,12 @@ void PlayerClass::DrawNormalLightning(int DrawLength) {
 
     DirectGraphics.SetFilterMode(false);
 
-    // Normale Projektions-Matrix wieder herstellen, wenn der Screen nicht gerade gewackelt wird
-    if (WackelMaximum <= 0.0f) {
-        matWorld = glm::mat4x4(1.0f);
-        g_matModelView = matWorld * g_matView;
+    // Drop the beam's local rotation before drawing the next world sprite.
+    matWorld = glm::mat4x4(1.0f);
+    g_matModelView = g_matView;
 #if defined(USE_GL1)
-        load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
 #endif
-    } else {
-        int Winkel = static_cast<int>(WackelValue + 500.0f) - 500;  // +500 und -500 damit er von -1.0 bis +1.0
-        // nich stehen bleibt, weil -0.99 bis +0.99
-        // auf 0 gerundet wird
-
-        // Winkel angleichen, damit er immer zwischen 0° und 360° bleibt
-        clampAngle(Winkel);
-        matRot = glm::rotate(glm::mat4x4(1.0f), DegreetoRad[Winkel], glm::vec3(0.0f, 0.0f, 1.0f));
-
-        if (WackelMaximum <= 0.0f)  // Wackeln zuende ?
-            WackelMaximum = 0.0f;   // Dann aufhören damit
-
-        // rotierte Matrix setzen
-        g_matModelView = matRot * g_matView;
-#if defined(USE_GL1)
-        load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
-#endif
-    }
 
     DirectGraphics.SetColorKeyMode();
 }
@@ -3430,20 +3445,21 @@ void PlayerClass::DrawNormalLightning(int DrawLength) {
 // Drawlength gibt an, wie lang der Blitz ist
 // --------------------------------------------------------------------------------------
 
-void PlayerClass::DrawCoolLightning(int DrawLength, float mul) {
+void PlayerClass::DrawCoolLightning(int DrawLength, bool advanceEffects, float mul) {
 
     constexpr float XSTART = 18.0f;
     constexpr float YSTART = 4.0f;
 
     // anzahl zwischenschritte im blitz
-    int const maxintersections = DrawLength + 2;
+    const int maxintersections = std::min(DrawLength + 2, 30);
 
     // Blitze neu zusammensetzen?
-    if (Console.Showing == false)
+    if (advanceEffects && !Console.Showing)
         changecount -= Timer.sync(1.0f);
 
-    if (changecount <= 0.0f) {
+    if (advanceEffects && (changecount <= 0.0f || lightningPoints != maxintersections)) {
         changecount = static_cast<float>(GetRandom(10) + 1) / 10.0f;
+        lightningPoints = maxintersections;
 
         for (int n = 0; n < 12; n++) {
             // Farbe festlegen, hell oder dunkel oder fast weiss
@@ -3467,25 +3483,25 @@ void PlayerClass::DrawCoolLightning(int DrawLength, float mul) {
 
             for (int i = 0; i < maxintersections * 2; i += 2) {
                 // zwei neue Punkte zwischen letztem Punkt und Endpunkt per Zufall setzen
-                int xstrahl = static_cast<int>((xpos - TileEngine.XOffset + XSTART) + (GetRandom(32) - 16) * mul);
-                int ystrahl = static_cast<int>(ypos - TileEngine.YOffset + YSTART - yoff);
+                float xstrahl = XSTART + (GetRandom(32) - 16) * mul;
+                float ystrahl = YSTART - yoff;
 
                 // Am End- und Austrittspunkt gebündelt
                 if (i == 0) {
-                    xstrahl = static_cast<int>(xpos - TileEngine.XOffset + XSTART) + GetRandom(6) - 2;
-                    ystrahl = static_cast<int>(ypos - TileEngine.YOffset + YSTART);
+                    xstrahl = XSTART + GetRandom(6) - 2;
+                    ystrahl = YSTART;
                 }
 
                 if (i >= (maxintersections - 1) * 2) {
-                    xstrahl = static_cast<int>(xpos - TileEngine.XOffset + XSTART) + GetRandom(6) - 2;
-                    ystrahl = static_cast<int>(ypos - TileEngine.YOffset + YSTART - (DrawLength + 1) * 32);
+                    xstrahl = XSTART + GetRandom(6) - 2;
+                    ystrahl = YSTART - (maxintersections - 1) * 32;
                 }
 
                 // Position setzen
-                strahlen[n][i + 0].x = static_cast<float>(xstrahl - size + XSTART);
-                strahlen[n][i + 1].x = static_cast<float>(xstrahl + size + XSTART);
-                strahlen[n][i + 0].y = static_cast<float>(ystrahl + YSTART);
-                strahlen[n][i + 1].y = static_cast<float>(ystrahl + YSTART);
+                strahlen[n][i + 0].x = xstrahl - size + XSTART;
+                strahlen[n][i + 1].x = xstrahl + size + XSTART;
+                strahlen[n][i + 0].y = ystrahl + YSTART;
+                strahlen[n][i + 1].y = ystrahl + YSTART;
 
                 // texturkoordinaten setzen
                 strahlen[n][i + 0].tu = 0.0f;
@@ -3502,14 +3518,25 @@ void PlayerClass::DrawCoolLightning(int DrawLength, float mul) {
         }
     }
 
-    // Strahlen rendern
+    if (lightningPoints < 2)
+        return;
+
+    // Position the cached bolt relative to the current viewport.
+    const auto view = g_matModelView;
+    g_matModelView = glm::translate(view, glm::vec3(xpos - TileEngine.XOffset, ypos - TileEngine.YOffset, 0.0f));
+#if defined(USE_GL1)
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+#endif
     DirectGraphics.SetTexture(Projectiles.BlitzTexture.itsTexIdx);
 
+    const int strips = (std::min(maxintersections, lightningPoints) - 1) * 2 - 1;
     for (int n = 0; n < 12; n++) {
-        DirectGraphics.RendertoBuffer(GL_TRIANGLE_STRIP, (maxintersections - 1) * 2 - 1, &strahlen[n][0]);
+        DirectGraphics.RendertoBuffer(GL_TRIANGLE_STRIP, strips, &strahlen[n][0]);
     }
-
-    return;
+    g_matModelView = view;
+#if defined(USE_GL1)
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+#endif
 }
 
 // --------------------------------------------------------------------------------------
@@ -3519,7 +3546,7 @@ void PlayerClass::DrawCoolLightning(int DrawLength, float mul) {
 // Andernfalls nur der Blitzursprung beim Spieler
 // --------------------------------------------------------------------------------------
 
-bool PlayerClass::DoLightning() {
+bool PlayerClass::DoLightning(bool advanceEffects) {
 
     // Länge des Blitze mit berücksichtigten Wänden im Weg
     int DrawLength = BlitzLength - 1;  // Vom Maximum ausgehen (das wird später "gekürzt")
@@ -3541,10 +3568,10 @@ bool PlayerClass::DoLightning() {
 
     //----- Blitz animieren
 
-    if (!Console.Showing)
+    if (advanceEffects && !Console.Showing)
         BlitzCount += Timer.getSpeedFactor();  // Counter erhöhen
 
-    if (BlitzCount > PLAYER_BLITZ_SPEED)  // Animationsgrenze überschritten ?
+    if (advanceEffects && BlitzCount > PLAYER_BLITZ_SPEED)  // Animationsgrenze überschritten ?
     {
         BlitzCount = 0.0f;   // Dann Counter wieder auf Null setzen und
         BlitzAnim++;         // Nächste Animationsphase
@@ -3635,25 +3662,23 @@ bool PlayerClass::DoLightning() {
                 // Überschneiden sich die Rechtecke ?
                 if (xstart + 31 > pEnemy->xPos && xstart < pEnemy->xPos + GegnerRect[pEnemy->GegnerArt].right &&
                     ystart + 31 > pEnemy->yPos && ystart < pEnemy->yPos + GegnerRect[pEnemy->GegnerArt].bottom) {
-                    // Funken sprühen
-                    if (BlitzCount == 0.0f && BlitzAnim % 2 == 0)
-                        PartikelSystem.PushPartikel(xs + 12.0f, ys + 12.0f, LASERFUNKE);
+                    if (advanceEffects) {
+                        // Funken sprühen
+                        if (BlitzCount == 0.0f && BlitzAnim % 2 == 0)
+                            PartikelSystem.PushPartikel(xs + 12.0f, ys + 12.0f, LASERFUNKE);
 
-                    // Gegner blinken lassen
-                    pEnemy->DamageTaken = 255;
+                        // Gegner blinken lassen und Energy abziehen
+                        pEnemy->RegisterHit(this);
+                        pEnemy->Energy -= Timer.sync(BLITZ_POWER);
 
-                    // Energy abziehen
-                    pEnemy->Energy -= Timer.sync(BLITZ_POWER);
-
-                    // Hit Sound
-                    // DKS - Added function WaveIsPlaying() to SoundManagerClass:
-                    if (!SoundManager.WaveIsPlaying(SOUND::HIT + pEnemy->HitSound))
-                        SoundManager.PlayWave(100, 128, 21000 + GetRandom(1000), SOUND::HIT + pEnemy->HitSound);
+                        if (!SoundManager.WaveIsPlaying(SOUND::HIT + pEnemy->HitSound))
+                            SoundManager.PlayWave(100, 128, 21000 + GetRandom(1000), SOUND::HIT + pEnemy->HitSound);
+                    }
 
                     // PlattForm ShootButton getroffen ? Dann Blitz kürzen
                     //
                     if (pEnemy->GegnerArt == SHOOTBUTTON) {
-                        if (BlitzCount == 0.0f && BlitzAnim % 2 == 0)
+                        if (advanceEffects && BlitzCount == 0.0f && BlitzAnim % 2 == 0)
                             PartikelSystem.PushPartikel(xs + 12.0f, ys + 12.0f, LASERFUNKE);  // Funken sprühen
                         DrawLength = i - 1;                                             // Blitz "kürzen"
                         i = BlitzLength + 2;
@@ -3664,23 +3689,25 @@ bool PlayerClass::DoLightning() {
         }
 
         // Zerstörbare Wände ?
-        TileEngine.CheckDestroyableWalls(xs, ys, 0, 0, Rect);
-        TileEngine.BlockDestroyRechts(xs, ys, xs, ys, Rect);
-        TileEngine.BlockDestroyLinks(xs, ys, xs, ys, Rect);
-        TileEngine.BlockDestroyOben(xs, ys, xs, ys, Rect);
-        TileEngine.BlockDestroyUnten(xs, ys, xs, ys, Rect);
+        if (advanceEffects) {
+            TileEngine.CheckDestroyableWalls(xs, ys, 0, 0, Rect);
+            TileEngine.BlockDestroyRechts(xs, ys, xs, ys, Rect);
+            TileEngine.BlockDestroyLinks(xs, ys, xs, ys, Rect);
+            TileEngine.BlockDestroyOben(xs, ys, xs, ys, Rect);
+            TileEngine.BlockDestroyUnten(xs, ys, xs, ys, Rect);
 
-        if (TileEngine.BlockLinks(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&  // Im Wasser blitzen ?
-            TileEngine.BlockRechts(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&
-            TileEngine.BlockOben(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&
-            TileEngine.BlockUnten(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER && GetRandom(80) == 0)
-            PartikelSystem.PushPartikel(xs + GetRandom(32), ys + GetRandom(32), BUBBLE);  // Dann blubbern
+            if (TileEngine.BlockLinks(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&
+                TileEngine.BlockRechts(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&
+                TileEngine.BlockOben(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER &&
+                TileEngine.BlockUnten(xs, ys, xs, ys, Rect) & BLOCKWERT_WASSER && GetRandom(80) == 0)
+                PartikelSystem.PushPartikel(xs + GetRandom(32), ys + GetRandom(32), BUBBLE);
+        }
 
         if (TileEngine.BlockLinks(xs, ys, xs, ys, Rect) & BLOCKWERT_WAND ||  // Eine Wand getroffen ?
             TileEngine.BlockRechts(xs, ys, xs, ys, Rect) & BLOCKWERT_WAND ||
             TileEngine.BlockOben(xs, ys, xs, ys, Rect) & BLOCKWERT_WAND ||
             TileEngine.BlockUnten(xs, ys, xs, ys, Rect) & BLOCKWERT_WAND) {
-            if (BlitzCount == 0.0f && BlitzAnim % 2 == 0)
+            if (advanceEffects && BlitzCount == 0.0f && BlitzAnim % 2 == 0)
                 PartikelSystem.PushPartikel(xs + 12, ys + 12, LASERFUNKE);  // Funken sprühen
             // DKS - Support new trig sin/cos lookup table and use deg/rad versions of sin/cos:
             // xstart += static_cast<float>(32*cos(PI * (BlitzWinkel-90) / 180));
@@ -3737,45 +3764,26 @@ bool PlayerClass::DoLightning() {
         DrawLength = 0;
 
     if (options_Detail >= DETAIL_HIGH)
-        DrawCoolLightning(DrawLength);
+        DrawCoolLightning(DrawLength, advanceEffects);
     else
         DrawNormalLightning(DrawLength);
 
     // nochmal rendern bei supershot?
     if (RiesenShotExtra > 0.0f) {
         if (options_Detail >= DETAIL_HIGH)
-            DrawCoolLightning(DrawLength, 1.2f);
+            DrawCoolLightning(DrawLength, advanceEffects, 1.2f);
         else
             DrawNormalLightning(DrawLength);
     }
 
     DirectGraphics.SetFilterMode(false);
 
-    // Normale Projektions-Matrix wieder herstellen, wenn der Screen nicht gerade gewackelt wird
-    if (WackelMaximum <= 0.0f) {
-        matWorld = glm::mat4x4(1.0f);
-        g_matModelView = matWorld * g_matView;
+    // Drop the beam's local rotation before drawing the next world sprite.
+    matWorld = glm::mat4x4(1.0f);
+    g_matModelView = g_matView;
 #if defined(USE_GL1)
-        load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
 #endif
-    } else {
-        int Winkel = static_cast<int>(WackelValue + 500.0f) - 500;  // +500 und -500 damit er von -1.0 bis +1.0
-        // nich stehen bleibt, weil -0.99 bis +0.99
-        // auf 0 gerundet wird
-
-        // Winkel angleichen, damit er immer zwischen 0° und 360° bleibt
-        clampAngle(Winkel);
-        matRot = glm::rotate(glm::mat4x4(1.0f), DegreetoRad[Winkel], glm::vec3(0.0f, 0.0f, 1.0f));
-
-        if (WackelMaximum <= 0.0f)  // Wackeln zuende ?
-            WackelMaximum = 0.0f;   // Dann aufhören damit
-
-        // rotierte Matrix setzen
-        g_matModelView = matWorld * g_matView;
-#if defined(USE_GL1)
-        load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
-#endif
-    }
 
     DirectGraphics.SetColorKeyMode();
 
@@ -3788,7 +3796,7 @@ bool PlayerClass::DoLightning() {
 // Der Beam lädt sich langsam auf, je nach Blitzlänge unterschiedlich schnell
 // --------------------------------------------------------------------------------------
 
-bool PlayerClass::LoadBeam() {
+bool PlayerClass::LoadBeam(bool advanceEffects) {
     // Einmal im Kreis rumgedreht ? Dann wieder
     // von vorne beginnen mit der Rotation
     // und zwar im und gegen den Uhrzeigersinn
@@ -3796,13 +3804,12 @@ bool PlayerClass::LoadBeam() {
 
     //----- Blitz animieren
 
-    BlitzCount += Timer.getSpeedFactor();            // Counter erhöhen
-    if (BlitzCount > PLAYER_BLITZ_SPEED)  // Animationsgrenze überschritten ?
-    {
-        BlitzCount = 0.0f;   // Dann Counter wieder auf Null setzen und
-        BlitzAnim++;         // Nächste Animationsphase
-        if (BlitzAnim >= 4)  // Animation von vorne beginnen ?
-            BlitzAnim = 0;
+    if (advanceEffects) {
+        BlitzCount += Timer.getSpeedFactor();
+        if (BlitzCount > PLAYER_BLITZ_SPEED) {
+            BlitzCount = 0.0f;
+            BlitzAnim = (BlitzAnim + 1) % 4;
+        }
     }
 
     // Ende des Blitzes beim Spieler leuchten lassen, falls er ihn grade noch auflädt
@@ -3900,7 +3907,8 @@ void PlayerClass::DamagePlayer(float amount, bool Override) {
 
         DamageCounter = 5.0f;
 
-        DrawPlayer(true, false);
+        if (!TileEngine.IsCoopSplit())
+            DrawPlayer(true, false);
         WasDamaged = true;
     }
 }
@@ -3973,9 +3981,9 @@ void PlayerClass::CalcFlamePos() {
             // im Sprung?
             if (Handlung == PlayerActionEnum::SPRINGEN) {
             // dabei hochzielen?
-            if (Aktion[AKTION_OBEN]) {
+            if (AimingUp()) {
                 // nur noch?
-                if (!(Aktion[AKTION_LINKS] || Aktion[AKTION_RECHTS])) {
+                if (!DiagonalAim()) {
                     AustrittAnim = 2;
                     AustrittX = xoff - 47.0f;
                     AustrittY = yoff - 34.0f;
@@ -4036,9 +4044,9 @@ void PlayerClass::CalcFlamePos() {
             // im Sprung?
             if (Handlung == PlayerActionEnum::SPRINGEN) {
             // dabei hochzielen?
-            if (Aktion[AKTION_OBEN]) {
+            if (AimingUp()) {
                 // nur noch?
-                if (!(Aktion[AKTION_LINKS] || Aktion[AKTION_RECHTS])) {
+                if (!DiagonalAim()) {
                     AustrittAnim = 2;
                     AustrittX = xoff + 62.0f;
                     AustrittY = yoff - 34.0f;
@@ -4140,10 +4148,10 @@ void PlayerClass::CalcAustrittsPunkt() {
 
 bool PlayerClass::CheckLevelExit() const {
     // Spieler aus Level draussen?
-    return xpos + Player[0].CollideRect.right < TileEngine.XOffset ||
-           xpos + Player[0].CollideRect.left > TileEngine.XOffset + RENDERWIDTH ||
-           ypos + Player[0].CollideRect.bottom < TileEngine.YOffset ||
-           ypos + Player[0].CollideRect.top > TileEngine.YOffset + RENDERHEIGHT;
+    return xpos + CollideRect.right < TileEngine.XOffset ||
+           xpos + CollideRect.left > TileEngine.XOffset + RENDERWIDTH ||
+           ypos + CollideRect.bottom < TileEngine.YOffset ||
+           ypos + CollideRect.top > TileEngine.YOffset + RENDERHEIGHT;
 }
 
 // --------------------------------------------------------------------------------------
@@ -4151,12 +4159,31 @@ bool PlayerClass::CheckLevelExit() const {
 // --------------------------------------------------------------------------------------
 
 void PlayerClass::PlayerInExit() {
-    StageClearRunning = false;
+    for (int p = 0; p < NUMPLAYERS; ++p)
+        Player[p].StageClearRunning = false;
 
-    // Summary Screen zeigen, wenn nicht im Tutorial Mode
-    if (!RunningTutorial)
-        SummaryScreen();
+    if (RunningTutorial) {
+        RunningTutorial = false;
+        for (int p = 0; p < NUMPLAYERS; ++p) {
+            Player[p].GodMode = false;
+            Player[p].DoFesteAktion = false;
+        }
+        GUI.HideBoxFast();
+        SoundManager.StopSongs();
+        DisplayHintNr = -1;
+        if (NewStage == TUTORIAL_END) {
+            StartIntro();
+        } else {
+            // The tutorial also contains secret warps to specific campaign stages.
+            const int destination = NewStage;
+            InitNewGame();
+            Stage = NewStage = destination;
+            InitNewGameLevel();
+        }
+        return;
+    }
 
+    SummaryScreen();
     Stage = NewStage;  // Anpassen dass wir im neuen Level sind
 
     SpielZustand = GameStateEnum::MAINMENU;
@@ -4182,23 +4209,11 @@ void PlayerClass::PlayerInExit() {
     // Ansonsten Savegame Menu
     //
 
-    else if (!RunningTutorial) {
-        pMenu->LoadSavegames();  // Slots mit aktuellen Savegames füllen
+    else {
+        pMenu->LoadSavegames();
         pMenu->AktuellerPunkt = 0;
         pMenu->AktuellerZustand = MENUZUSTAND_SAVEGAME;
-    } else {
-        for (int p = 0; p < NUMPLAYERS; p++)
-            Player[p].GodMode = false;
-
-        Grenades = 3;
-        PowerLines = 3;
-        SmartBombs = 1;
-
-        RunningTutorial = false;
-        InitNewGameLevel();  // Neues level laden
     }
-
-    RunningTutorial = false;
 }
 
 // --------------------------------------------------------------------------------------
@@ -4249,18 +4264,30 @@ void PlayerClass::ScrollFlugsack() {
 // --------------------------------------------------------------------------------------
 
 void PlayerClass::checkWeaponSwitch() {
-    if (!Aktion[AKTION_WAFFEN_CYCLE])
-        weaponswitchlock = false;
+    // Direct weapon selection follows the same per-player bindings as cycling.
+    if (!Console.Showing) {
+        for (int weapon = 0; weapon < 3; ++weapon)
+            if (Aktion[AKTION_WAFFE_SPREAD + weapon] && (weapon == 0 || CurrentWeaponLevel[weapon] > 0))
+                SelectedWeapon = weapon;
+    }
+    const bool next = Aktion[AKTION_WAFFEN_CYCLE];
+    const bool previous = Aktion[AKTION_WAFFEN_PREV];
+    const bool nextPressed = next && !nextWeaponHeld;
+    const bool previousPressed = previous && !previousWeaponHeld;
+    nextWeaponHeld = next;
+    previousWeaponHeld = previous;
+    if (nextPressed == previousPressed)
+        return;
 
-    if (Aktion[AKTION_WAFFEN_CYCLE] && !weaponswitchlock) {
-        weaponswitchlock = true;
-
-        do {
-            SelectedWeapon++;
-        } while (CurrentWeaponLevel[SelectedWeapon] == 0);
-
-        if (SelectedWeapon >= 3)
-            SelectedWeapon = 0;
+    constexpr int weapons = 3;
+    const int step = nextPressed ? 1 : weapons - 1;
+    int weapon = SelectedWeapon;
+    for (int i = 0; i < weapons; ++i) {
+        weapon = (weapon + step) % weapons;
+        if (CurrentWeaponLevel[weapon] > 0) {
+            SelectedWeapon = weapon;
+            return;
+        }
     }
 }
 

@@ -41,9 +41,6 @@ IntroClass::IntroClass() {
     Counter = 0.0f;
     SoundManager.LoadSong("intro.it", MUSIC::INTRO);
 
-    while (DirectInput.AreAllKeysReleased() == false)
-        DirectInput.UpdateTastatur();
-
     // Generate a series of lines from the intro text that are split if too long to display:
     for (int line_ctr = 0; line_ctr <= 23; line_ctr++) {
         int off = TEXT::INTRO1 + line_ctr;
@@ -114,23 +111,37 @@ void IntroClass::EndIntro() {
 // --------------------------------------------------------------------------------------
 
 void IntroClass::DoIntro() {
-    // Hintergrund rendern
     DirectGraphics.SetColorKeyMode();
 
+    const float left = DirectGraphics.InterfaceLeft();
+    const int width = DirectGraphics.GetViewWidth();
+    const bool widescreen = width > RENDERWIDTH;
+    const int imageHeight = width * RENDERHEIGHT / RENDERWIDTH;
+    // Frame each shot around its subject while scaling both axes equally.
+    constexpr float verticalCrop[] = {0.31f, 0.48f, 0.48f, 0.18f, 0.48f, 0.55f};
+    const auto drawShot = [&](int shot, D3DCOLOR color) {
+        if (widescreen) {
+            const float top = (RENDERHEIGHT - imageHeight) * verticalCrop[shot];
+            Background[shot].RenderSpriteScaled(left, top, width, imageHeight, 0, color);
+        } else {
+            Background[shot].RenderSprite(left, 0, 0, color);
+        }
+    };
     int const a = std::clamp((TextOff - 1) / 4, 0, 5);
 
-    Background[a].RenderSprite(0, 0, 0, 0xFFFFFFFF);
+    drawShot(a, 0xFFFFFFFF);
 
     // nächstes Bild überblenden?
     if ((TextOff - 1) % 4 == 3 && a < 5) {
         int const alpha = static_cast<int>(Counter / 1300.0f * 255.0f);
         D3DCOLOR fadecol = D3DCOLOR_RGBA(255, 255, 255, static_cast<uint8_t>(alpha));
-        Background[a + 1].RenderSprite(0, 0, 0, fadecol);
+        drawShot(a + 1, fadecol);
     }
 
-    // Balken unten
-    RenderRect4(0, 360, 640, 60, 0x00000000, 0x00000000, 0xFF000000, 0xFF000000);
-    RenderRect(0, 420, 640, 60, 0xFF000000);
+    const int gradientStart = widescreen ? 352 : 360;
+    const int gradientEnd = widescreen ? 448 : 420;
+    RenderRect4(left, gradientStart, width, gradientEnd - gradientStart, 0, 0, 0xFF000000, 0xFF000000);
+    RenderRect(left, gradientEnd, width, RENDERHEIGHT - gradientEnd, 0xFF000000);
 
     // Intro laufen lassen
     switch (Zustand) {
@@ -149,7 +160,7 @@ void IntroClass::DoIntro() {
                 Zustand = IntroStateEnum::RUN;
             } else {
                 D3DCOLOR col = D3DCOLOR_RGBA(0, 0, 0, 255 - static_cast<int>(Counter));
-                RenderRect(0, 0, RENDERWIDTH, RENDERHEIGHT, col);
+                RenderRect(left, 0, width, RENDERHEIGHT, col);
             }
         } break;
 
@@ -165,7 +176,7 @@ void IntroClass::DoIntro() {
             }
 
             D3DCOLOR col = D3DCOLOR_RGBA(0, 0, 0, 255 - static_cast<int>(Counter));
-            RenderRect(0, 0, RENDERWIDTH, RENDERHEIGHT, col);
+            RenderRect(left, 0, width, RENDERHEIGHT, col);
 
         } break;
 
@@ -197,9 +208,9 @@ void IntroClass::DoIntro() {
                 }
 
                 // Text rendern
-                float xr = HorizCounter;
-                if (xr > 700.0f)
-                    xr = 700.0f;
+                const float captionLeft = left + 10.0f;
+                const float captionWidth = width - 10.0f;
+                float xr = std::min(HorizCounter, captionWidth);
 
                 DirectGraphics.SetAdditiveMode();
 
@@ -216,53 +227,43 @@ void IntroClass::DoIntro() {
                     if (t <= EntriesOff && (t - EntriesOff) > -lines_displayed && t < num_entries) {
                         const int tmp_h = 15 * scale_factor;
                         pDefaultFont->DrawText(
-                            10, static_cast<float>(RENDERHEIGHT - tmp_h + t * line_y_off) - EntriesOff * line_y_off,
+                            captionLeft, static_cast<float>(RENDERHEIGHT - tmp_h + t * line_y_off) - EntriesOff * line_y_off,
                             entries[t].text.c_str(), col);
 
                         // Teil des Textes verdecken
-                        if (t == EntriesOff) {
+                        if (t == EntriesOff && xr < captionWidth) {
                             DirectGraphics.SetColorKeyMode();
                             const int tmp_h2 = 17;
-                            RenderRect(xr, RENDERHEIGHT - (tmp_h2 - 1) * scale_factor, RENDERWIDTH,
+                            RenderRect(captionLeft + xr, RENDERHEIGHT - (tmp_h2 - 1) * scale_factor, captionWidth - xr,
                                        tmp_h2 * scale_factor, 0xFF000000);
                         }
                     }
                 }
 
-                // grüne Rechtecke rendern
+                // Blend the typewriter trail over the revealed caption.
                 if (EntriesOff < num_entries) {
-                    int l = pDefaultFont->StringLength(entries[EntriesOff].text.c_str(), 0) + 28;
+                    const float l = std::min<float>(pDefaultFont->StringLength(entries[EntriesOff].text.c_str(), 0) + 28,
+                                                    captionWidth);
                     int tmp_h = 16 * scale_factor;
+                    DirectGraphics.SetColorKeyMode();
                     if (xr < l) {
-                        for (int i = 0; i < 5; i++) {
-                            D3DCOLOR col;
-
-                            switch (i) {
-                                case 0:
-                                    col = D3DCOLOR_RGBA(255, 255, 255, 255);
-                                    break;
-                                case 1:
-                                    col = D3DCOLOR_RGBA(0, 255, 0, 255);
-                                    break;
-                                case 2:
-                                    col = D3DCOLOR_RGBA(0, 180, 0, 255);
-                                    break;
-                                case 3:
-                                    col = D3DCOLOR_RGBA(0, 90, 0, 255);
-                                    break;
-                                case 4:
-                                    col = D3DCOLOR_RGBA(0, 50, 0, 255);
-                                    break;
-                            }
-
-                            RenderRect(xr - i * 12 - 12, RENDERHEIGHT - tmp_h, 12, 12 * scale_factor, col);
+                        const D3DCOLOR trail[] = {
+                            D3DCOLOR_RGBA(255, 255, 255, 220), D3DCOLOR_RGBA(0, 255, 0, 110),
+                            D3DCOLOR_RGBA(0, 255, 0, 72), D3DCOLOR_RGBA(0, 255, 0, 44),
+                            D3DCOLOR_RGBA(0, 255, 0, 24)
+                        };
+                        for (int i = 0; i < static_cast<int>(std::size(trail)); ++i) {
+                            const float end = xr - i * 12;
+                            const float start = std::max(0.0f, end - 12.0f);
+                            if (end > start)
+                                RenderRect(captionLeft + start, RENDERHEIGHT - tmp_h, end - start, 12 * scale_factor, trail[i]);
                         }
                     } else {
                         xr = l;
 
                         // blinken lassen
                         if (static_cast<int>(Counter / 100.0f) % 2 == 0)
-                            RenderRect(xr - 12, RENDERHEIGHT - tmp_h, 12, 12 * scale_factor, 0xFFFFFFFF);
+                            RenderRect(captionLeft + xr - 12, RENDERHEIGHT - tmp_h, 12, 12 * scale_factor, 0xFFFFFFFF);
                     }
 
                     // Advance immediately to next line if the line was split:
@@ -278,4 +279,11 @@ void IntroClass::DoIntro() {
             break;
 
     }  // switch
+
+    // A held difficulty-confirm button belongs to the menu. Wait for a
+    // released frame before allowing keyboard or controller input to skip.
+    if (!DirectInput.AnyKeyDown() && !DirectInput.AnyButtonDown())
+        skipArmed = true;
+    else if (skipArmed)
+        EndIntro();
 }

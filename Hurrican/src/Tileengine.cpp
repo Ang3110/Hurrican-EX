@@ -14,8 +14,11 @@
 // Includes
 // --------------------------------------------------------------------------------------
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <optional>
 #include <string>
 namespace fs = std::filesystem;
 
@@ -31,6 +34,7 @@ namespace fs = std::filesystem;
 #include "HUD.hpp"
 #include "Logdatei.hpp"
 #include "Main.hpp"
+#include "Mathematics.hpp"
 #include "Partikelsystem.hpp"
 #include "Player.hpp"
 #include "Projectiles.hpp"
@@ -51,12 +55,15 @@ extern ProjectileListClass Projectiles;
 
 extern DirectGraphicsSprite *pGegnerGrafix[MAX_GEGNERGFX];  // Grafiken  der Gegner
 
-extern float WackelMaximum;
-extern float WackelValue;
 
 D3DCOLOR Col1, Col2, Col3;  // Farben für Wasser/Lava etc
 bool DrawDragon;            // Für den Drachen im Turm Level
 float ShadowAlpha;
+
+namespace {
+constexpr int waterfallWidth = 60;
+constexpr int waterfallHeight = 240;
+}
 
 // --------------------------------------------------------------------------------------
 // Klassendefunktionen
@@ -209,8 +216,10 @@ TileEngineClass::~TileEngineClass() {
 //      any specific order (i.e. after graphics system has been shutdown.
 void TileEngineClass::LoadSprites() {
     // Wasserfall Textur laden
-    Wasserfall[0].LoadImage("wasserfall.png", 60, 240, 60, 240, 1, 1);
-    Wasserfall[1].LoadImage("wasserfall2.png", 640, 480, 640, 480, 1, 1);
+    Wasserfall[0].LoadImage("wasserfall.png", waterfallWidth, waterfallHeight, waterfallWidth, waterfallHeight,
+                           1, 1, TextureLayout::Repeat);
+    Wasserfall[1].LoadImage("wasserfall2.png", RENDERWIDTH, RENDERHEIGHT, RENDERWIDTH, RENDERHEIGHT, 1, 1,
+                           TextureLayout::MirrorRepeat);
 
     LiquidGfx[0].LoadImage("water.png", 128, 128, 128, 128, 1, 1);
     LiquidGfx[1].LoadImage("water2.png", 128, 128, 128, 128, 1, 1);
@@ -227,6 +236,10 @@ void TileEngineClass::LoadSprites() {
 // --------------------------------------------------------------------------------------
 
 void TileEngineClass::InitNewLevel(int xSize, int ySize) {
+    wideBossArena = false;
+    walkoutExits.clear();
+    levelSplitScreenType = DirectGraphics.GetDisplaySettings().splitScreenType;
+    ResetCoopViews();
     LEVELSIZE_X = xSize;
     LEVELSIZE_Y = ySize;
 
@@ -280,6 +293,11 @@ void TileEngineClass::ClearLevel() {
 #endif  // 0
         Textures.UnloadTexture(gfx.itsTexIdx);
         gfx.itsTexIdx = -1;
+    }
+
+    for (auto *layer : {&Background, &ParallaxLayer[0], &ParallaxLayer[1], &ParallaxLayer[2], &CloudLayer}) {
+        Textures.UnloadTexture(layer->itsTexIdx);
+        layer->itsTexIdx = -1;
     }
 
     Projectiles.ClearAll();
@@ -375,10 +393,10 @@ loadfile:
 
     // Benutzte Hintergrundgrafiken laden
 
-    Background.LoadImage(DateiHeader.BackgroundFile, 640, 480, 640, 480, 1, 1);
-    ParallaxLayer[0].LoadImage(DateiHeader.ParallaxAFile, 640, 480, 640, 480, 1, 1);
-    ParallaxLayer[1].LoadImage(DateiHeader.ParallaxBFile, 640, 480, 640, 480, 1, 1);
-    CloudLayer.LoadImage(DateiHeader.CloudFile, 640, 240, 640, 240, 1, 1);
+    Background.LoadImage(DateiHeader.BackgroundFile, 640, 480, 640, 480, 1, 1, TextureLayout::Parallax);
+    ParallaxLayer[0].LoadImage(DateiHeader.ParallaxAFile, 640, 480, 640, 480, 1, 1, TextureLayout::Parallax);
+    ParallaxLayer[1].LoadImage(DateiHeader.ParallaxBFile, 640, 480, 640, 480, 1, 1, TextureLayout::Parallax);
+    CloudLayer.LoadImage(DateiHeader.CloudFile, 640, 240, 640, 240, 1, 1, TextureLayout::Parallax);
     Timelimit = static_cast<float>(FixEndian(DateiHeader.Timelimit));
     DateiHeader.NumObjects = FixEndian(DateiHeader.NumObjects);
 
@@ -388,8 +406,9 @@ loadfile:
     Player[0].PunisherActive = false;
     Player[1].PunisherActive = false;
 
-    Player[1].xpos = 0.0f;
-    Player[1].ypos = 0.0f;
+    bool hasSecondStart = false;
+    std::optional<LevelObjectStruct> firstStart;
+    Player[1].xpos = Player[1].ypos = 0.0f;
 
     TimelimitSave = Timelimit;
     MaxSecrets = 0;
@@ -504,6 +523,12 @@ loadfile:
 
             // Startposition des Spielers
             if (LoadObject.ObjectID == 0) {
+                if (LoadObject.Value2 != 0 && LoadObject.Value2 != 1)
+                    continue;
+                if (LoadObject.Value2 == 1)
+                    hasSecondStart = true;
+                else if (!firstStart)
+                    firstStart = LoadObject;
                 // Anfängliche Blickrichtung auch aus Leveldatei lesen
                 if (LoadObject.Value1 == 0)
                     Player[LoadObject.Value2].Blickrichtung = DirectionEnum::RECHTS;
@@ -694,6 +719,9 @@ loadfile:
 
                 // Gegner bei aktuellem Skill level überhaupt erzeugen ?
                 if (LoadObject.Skill <= Skill) {
+                    if (LoadObject.ObjectID == ENDLEVEL && (LoadObject.Value2 == AKTION_LINKS ||
+                        LoadObject.Value2 == AKTION_RECHTS || LoadObject.Value2 == AKTION_OBEN || LoadObject.Value2 == AKTION_UNTEN))
+                        walkoutExits.push_back(LoadObject);
                     Gegner.PushGegner(static_cast<float>(LoadObject.XPos),
                                       static_cast<float>(LoadObject.YPos), LoadObject.ObjectID,
                                       LoadObject.Value1, LoadObject.Value2, LoadObject.ChangeLight);
@@ -707,16 +735,23 @@ loadfile:
         }
     }
 
-    // Kein Startpunkt für Spieler 2 gefunden? Dann von Spieler 1 kopieren
-    if (Player[1].xpos == 0.0f && Player[1].ypos == 0.0f) {
-        Player[1].Blickrichtung = Player[0].Blickrichtung;
-        Player[1].xpos = Player[0].xpos + 40.0f;
-        Player[1].ypos = Player[0].ypos;
-        Player[1].xposold = Player[1].xpos;
-        Player[1].yposold = Player[1].ypos;
-        Player[1].JumpxSave = Player[1].xpos;
-        Player[1].JumpySave = Player[1].ypos;
+    // Fall back to the level's first start if it has no explicit P2 marker.
+    if (!hasSecondStart) {
+        // Some original maps (including Temple) mark both authored starts as P1.
+        if (NUMPLAYERS == 2 && firstStart) {
+            Player[1].Blickrichtung = firstStart->Value1 == 0 ? DirectionEnum::RECHTS : DirectionEnum::LINKS;
+            Player[1].xpos = static_cast<float>(firstStart->XPos);
+            Player[1].ypos = static_cast<float>(firstStart->YPos);
+        } else {
+            Player[1].Blickrichtung = Player[0].Blickrichtung;
+            Player[1].xpos = Player[0].xpos + 40.0f;
+            Player[1].ypos = Player[0].ypos;
+        }
     }
+    if (NUMPLAYERS == 2)
+        Player[1].SeparateCoopSpawn(Player[0]);
+    Player[1].xposold = Player[1].JumpxSave = Player[1].xpos;
+    Player[1].yposold = Player[1].JumpySave = Player[1].ypos;
 
     Datei.read(reinterpret_cast<char *>(&DateiAppendix), sizeof(DateiAppendix));
 
@@ -785,55 +820,266 @@ void TileEngineClass::SetScrollSpeed(float xSpeed, float ySpeed) {
 // Ausrechnen, welcher Levelausschnitt gerendert werden soll
 // --------------------------------------------------------------------------------------
 
+TileEngineClass::HorizontalBounds TileEngineClass::HorizontalPlayfieldAt(float cameraX, bool wide) const {
+    const int width = wide ? DirectGraphics.GetViewWidth() : RENDERWIDTH;
+    if (width <= RENDERWIDTH)
+        return {cameraX, cameraX + RENDERWIDTH};
+
+    const float worldLeft = std::clamp(cameraX + DirectGraphics.InterfaceLeft(),
+                                      0.0f, std::max(0.0f, LEVELPIXELSIZE_X - width));
+    const float left = std::clamp(worldLeft, cameraX + RENDERWIDTH - width, cameraX);
+    // A wider display can show both ends of a narrow map at once.
+    return {left, std::max(left + PLAYER_FRAME_WIDTH, std::min(left + width, LEVELPIXELSIZE_X))};
+}
+
+float TileEngineClass::CalculateViewLeft() const {
+    return HorizontalPlayfieldAt(XOffset, true).left - XOffset;
+}
+
+bool TileEngineClass::HasWideBossArena() const {
+    return wideBossArena && !IsElevatorLevel && g_Fahrstuhl_yPos < 0.0f && DirectGraphics.GetViewWidth() > RENDERWIDTH &&
+           (Zustand == TileStateEnum::SCROLLTOLOCK || Zustand == TileStateEnum::LOCKED);
+}
+
+void TileEngineClass::ScrollBossArena(float x, float y, TileStateEnum state) {
+    ScrollLevel(x, y, state);
+    wideBossArena = true;
+}
+
+bool TileEngineClass::HasFreeCoopCamera() const {
+    return NUMPLAYERS == 2 && Zustand == TileStateEnum::SCROLLBAR && FlugsackFliesFree &&
+           !IsElevatorLevel && g_Fahrstuhl_yPos < 0.0f && ScrollSpeedX == 0.0f && ScrollSpeedY == 0.0f &&
+           NewXOffset == -1.0f && NewYOffset == -1.0f && !ShowSummary &&
+           !Player[0].DoFesteAktion && !Player[1].DoFesteAktion &&
+           !Player[0].StageClearRunning && !Player[1].StageClearRunning;
+}
+
+namespace {
+constexpr float coopSplitMargin = 64.0f;
+constexpr float coopMergeMargin = 104.0f;
+constexpr float coopSwapMargin = 6.0f;
+}
+
+void TileEngineClass::ResetCoopViews() {
+    coopSeparatedX = coopSeparatedY = false;
+    coopSplitAmount = 0.0f;
+    coopViewScale = coopTargetViewScale = 1.0f;
+    coopLook = {};
+}
+
+void TileEngineClass::UpdateCoopViews() {
+    if (!CanSplitCoop()) {
+        ResetCoopViews();
+        return;
+    }
+
+    if (Player[0].Handlung == PlayerActionEnum::TOT || Player[1].Handlung == PlayerActionEnum::TOT) {
+        if (IsCoopSplit()) {
+            const auto &survivor = Player[Player[0].Handlung == PlayerActionEnum::TOT ? 1 : 0];
+            XOffset = survivor.xpos + 35.0f - RENDERWIDTH / 2;
+            YOffset = survivor.ypos + 40.0f - RENDERHEIGHT / 2;
+            CheckBounds();
+        }
+        ResetCoopViews();
+        return;
+    }
+
+    const int fullWidth = DirectGraphics.GetViewWidth();
+    const bool wasSplit = IsCoopSplit();
+    const bool wasSeparatedX = coopSeparatedX;
+    const bool wasSeparatedY = coopSeparatedY;
+    const float dx = Player[1].xpos - Player[0].xpos;
+    const float dy = Player[1].ypos - Player[0].ypos;
+    // Ease out as the players spread apart, then split only once they exceed the wider view.
+    const float radialDistance = std::hypot(dx / (fullWidth - 2.0f * coopSplitMargin),
+                                           dy / (RENDERHEIGHT - 2.0f * coopSplitMargin));
+    const float t = glm::smoothstep(0.45f, 1.0f, radialDistance);
+    coopTargetViewScale = glm::mix(1.0f, maxCoopViewScale, t);
+    const float xMargin = wasSeparatedX ? coopMergeMargin : coopSplitMargin;
+    const float yMargin = wasSeparatedY ? coopMergeMargin : coopSplitMargin;
+    coopSeparatedX = std::abs(dx) > (fullWidth - 2.0f * xMargin) * maxCoopViewScale;
+    coopSeparatedY = std::abs(dy) > (RENDERHEIGHT - 2.0f * yMargin) * maxCoopViewScale;
+    if (!IsCoopSplit()) {
+        // Dropping to a different aspect ratio while paused invalidates the old panes.
+        const int oldWidth = coopViews[0].w + (coopSplitLeftRight ? coopViews[1].w : 0);
+        if (oldWidth != fullWidth)
+            coopSplitAmount = 0.0f;
+        return;
+    }
+
+    const bool wasLeftRight = coopSplitLeftRight;
+    if (coopSeparatedX != coopSeparatedY) {
+        coopSplitLeftRight = coopSeparatedX;
+    } else if (!wasSplit) {
+        const float xSeparation = std::abs(dx) / (fullWidth - 2.0f * coopSplitMargin);
+        const float ySeparation = std::abs(dy) / (RENDERHEIGHT - 2.0f * coopSplitMargin);
+        coopSplitLeftRight = xSeparation >= ySeparation;
+    } else if (!wasSeparatedX || !wasSeparatedY) {
+        // A new separation takes priority, such as a climb while already split left and right.
+        coopSplitLeftRight = !wasSeparatedX;
+    }
+
+    // Keep pane order steady while players are nearly aligned along the split axis.
+    const float separation = coopSplitLeftRight ? dx : dy;
+    if (!wasSplit || coopSplitLeftRight != wasLeftRight || std::abs(separation) > coopSwapMargin)
+        coopFirstPlayer = separation >= 0.0f ? 0 : 1;
+
+    UpdateCoopViewBounds(fullWidth);
+}
+
+void TileEngineClass::UpdateCoopViewBounds(int fullWidth) {
+    const int height = coopSplitLeftRight ? RENDERHEIGHT : RENDERHEIGHT / 2;
+    for (int p = 0; p < 2; ++p) {
+        // The opening pane (P2) receives the extra column at odd logical widths.
+        const int width = coopSplitLeftRight ? (fullWidth + p) / 2 : fullWidth;
+        const auto look = CoopLookOffset(p, {width, height});
+        const float x = std::clamp(Player[p].xpos + 35.0f - width / 2.0f + look.x,
+                                   0.0f, std::max(0.0f, LEVELPIXELSIZE_X - width));
+        const float y = std::clamp(Player[p].ypos + 40.0f - height / 2.0f + look.y,
+                                   0.0f, std::max(0.0f, LEVELPIXELSIZE_Y - height));
+        const auto origin = ExitViewOrigin({x,y}, {width,height}, {Player[p].xpos + 35, Player[p].ypos + 40});
+        coopViews[p] = {static_cast<int>(origin.x), static_cast<int>(origin.y), width, height};
+    }
+}
+
+glm::vec2 TileEngineClass::CoopSplitNormal() const {
+    if (coopTurnProgress < 1.0f)
+        return glm::normalize(glm::vec2(cos(coopSplitAngle), sin(coopSplitAngle)));
+
+    const float side = coopFirstPlayer == 0 ? 1.0f : -1.0f;
+    return coopSplitLeftRight ? glm::vec2(side, 0.0f) : glm::vec2(0.0f, side);
+}
+
+void TileEngineClass::AdvanceCoopTransition(float frameSeconds) {
+    constexpr float duration = 0.38f;
+    const float frameTime = std::min(frameSeconds, 0.05f);
+    const float step = frameTime / duration;
+    coopViewScale = glm::mix(coopViewScale, coopTargetViewScale, 1.0f - std::exp(-12.0f * frameTime));
+    if (std::abs(coopViewScale - coopTargetViewScale) < 0.0005f)
+        coopViewScale = coopTargetViewScale;
+    const bool firstIsPlayerOne = coopFirstPlayer == 0;
+    const float targetAngle = coopSplitLeftRight ? (firstIsPlayerOne ? 0.0f : PI)
+                                                : (firstIsPlayerOne ? HALF_PI : -HALF_PI);
+    if (coopSplitAmount == 0.0f) {
+        coopSplitAngle = coopTurnTarget = targetAngle;
+        coopTurnProgress = 1.0f;
+    } else if (targetAngle != coopTurnTarget) {
+        // Start at the displayed angle, even if the players change direction mid-turn.
+        coopTurnStart = targetAngle - std::remainder(targetAngle - coopSplitAngle, TWO_PI);
+        coopTurnTarget = targetAngle;
+        coopTurnProgress = 0.0f;
+    }
+    if (coopTurnProgress < 1.0f) {
+        coopTurnProgress = std::min(1.0f, coopTurnProgress + step);
+        const float t = coopTurnProgress;
+        const float eased = t * t * (3.0f - 2.0f * t);
+        coopSplitAngle = coopTurnStart + (coopTurnTarget - coopTurnStart) * eased;
+    }
+    const bool split = IsCoopSplit();
+    coopSplitAmount = std::clamp(coopSplitAmount + (split ? step : -step), 0.0f, 1.0f);
+    if (coopSplitAmount == 0.0f) {
+        coopLook = {};
+    } else {
+        const float lookEase = 1.0f - std::exp(-11.0f * frameTime);
+        for (int p = 0; p < 2; ++p) {
+            const auto &player = Player[p];
+            glm::vec2 target(0.0f);
+            if (split && !Console.Showing && player.GameOverTimer == 0.0f) {
+                target.x = static_cast<float>(player.Aktion[ACTION_LOOK_RIGHT]) -
+                           static_cast<float>(player.Aktion[ACTION_LOOK_LEFT]);
+                target.y = static_cast<float>(player.Aktion[AKTION_UNTEN]) -
+                         static_cast<float>(player.Aktion[AKTION_OBEN]);
+            }
+            coopLook[p] = glm::mix(coopLook[p], target, lookEase);
+            if (glm::length(coopLook[p] - target) < 0.002f)
+                coopLook[p] = target;
+        }
+        if (split)
+            UpdateCoopViewBounds(DirectGraphics.GetViewWidth());
+    }
+}
+
+glm::vec2 TileEngineClass::ExitViewOrigin(glm::vec2 origin, glm::vec2 size, glm::vec2 focus) const {
+    const auto &rect = GegnerRect[ENDLEVEL];
+    for (const auto &exit : walkoutExits) {
+        const bool sideways = exit.Value2 == AKTION_LINKS || exit.Value2 == AKTION_RECHTS;
+        const bool forward = exit.Value2 == AKTION_RECHTS || exit.Value2 == AKTION_UNTEN;
+        const int axis = sideways ? 0 : 1;
+        const int cross = 1 - axis;
+        const glm::vec2 low(exit.XPos + rect.left, exit.YPos + rect.top);
+        const glm::vec2 high(exit.XPos + rect.right, exit.YPos + rect.bottom);
+        const float entry = forward ? low[axis] : high[axis];
+        const float depth = (focus[axis] - entry) * (forward ? 1 : -1);
+        // Keep the doorway framed while the automatic walk carries the suits offscreen.
+        const bool leaving = Player[0].StageClearRunning && NewStage == exit.Value1 &&
+            origin[axis] < high[axis] && origin[axis] + size[axis] > low[axis];
+        if (depth < -size[axis] || (depth > high[axis] - low[axis] + 80 && !leaving))
+            continue;
+        const float distance = std::max(low[cross] - focus[cross], focus[cross] - high[cross]);
+        const float influence = 1.0f - glm::smoothstep(40.0f, 140.0f, distance);
+        // The first two tiles of the trigger are visible. The rest is the offscreen run-out.
+        const float reach = 2.0f * (sideways ? TILESIZE_X : TILESIZE_Y);
+        const float edge = forward ? std::min(origin[axis], entry + reach - size[axis]) : std::max(origin[axis], entry - reach);
+        origin[axis] = glm::mix(origin[axis], edge, influence);
+    }
+    return glm::clamp(origin, glm::vec2(0), glm::max(glm::vec2(0), glm::vec2(LEVELPIXELSIZE_X, LEVELPIXELSIZE_Y) - size));
+}
+
+glm::vec2 TileEngineClass::SharedViewOrigin(float worldScale) const {
+    const glm::vec2 standard(DirectGraphics.GetViewWidth(), RENDERHEIGHT);
+    const auto size = standard * worldScale;
+    auto origin = glm::vec2(XOffset + CalculateViewLeft(), YOffset) + (standard - size) / 2.0f;
+    for (int p = 0; p < NUMPLAYERS; ++p) {
+        if (CoopPlayerReady(Player[p]))
+            origin = ExitViewOrigin(origin, size, {Player[p].xpos + 35, Player[p].ypos + 40});
+    }
+    return glm::clamp(origin, glm::vec2(0), glm::max(glm::vec2(0), glm::vec2(LEVELPIXELSIZE_X, LEVELPIXELSIZE_Y) - size));
+}
+
+bool TileEngineClass::IsInPlayerViews(float left, float top, float right, float bottom, bool widescreen) const {
+    if (IsCoopSplit()) {
+        for (const auto &view : coopViews) {
+            if (right >= view.x && left <= view.x + view.w && bottom >= view.y && top <= view.y + view.h)
+                return true;
+        }
+        return false;
+    }
+
+    const float scale = widescreen ? coopViewScale : 1.0f;
+    const auto origin = widescreen ? SharedViewOrigin(scale) : glm::vec2(XOffset, YOffset);
+    const int width = widescreen ? DirectGraphics.GetViewWidth() : RENDERWIDTH;
+    return right >= origin.x && left <= origin.x + width * scale &&
+           bottom >= origin.y && top <= origin.y + RENDERHEIGHT * scale;
+}
+
 void TileEngineClass::CalcRenderRange() {
+    CalcRenderRange(CalculateViewLeft(), DirectGraphics.GetViewWidth(), RENDERHEIGHT);
+}
 
-    // Ausschnittgröße berechnen
-    //
-    int xo = static_cast<int>(XOffset * (1.0f / TILESIZE_X));
-    int yo = static_cast<int>(YOffset * (1.0f / TILESIZE_Y));
+void TileEngineClass::CalcRenderRange(float left, int width, int height) {
+    RenderLeft = left;
+    RenderRight = left + width;
+    RenderHeight = height;
 
-    /* CHECKME: Without the following checks the game
-       in places like start of level 2 for a short
-       time renders areas outside map which can cause
-       crashes (random non existing textures). (stegerg) */
+    xLevel = std::max(0, static_cast<int>(XOffset) / TILESIZE_X);
+    yLevel = std::max(0, static_cast<int>(YOffset) / TILESIZE_Y);
+    // Tiles and actors must share the fractional camera origin as a pane moves or tilts.
+    xTileOffs = XOffset - xLevel * TILESIZE_X;
+    yTileOffs = YOffset - yLevel * TILESIZE_Y;
 
-    if (xo < 0)
-        xo = 0;
-    if (yo < 0)
-        yo = 0;
+    // Keep one extra tile at each edge for water distortion and screen shake.
+    RenderPosX = std::max(-xLevel, static_cast<int>(std::floor((RenderLeft + xTileOffs) / TILESIZE_X)) - 1);
+    RenderPosXTo = std::min(LEVELSIZE_X - xLevel,
+                           static_cast<int>(std::floor((RenderRight + xTileOffs) / TILESIZE_X)) + 2);
+    RenderPosY = std::max(-yLevel, -1);
+    RenderPosYTo = std::min(LEVELSIZE_Y - yLevel, height / TILESIZE_Y + 2);
 
-    RenderPosX = -1;
-    RenderPosY = -1;
-
-    if (RenderPosX + xo < 0)
-        RenderPosX = 0;
-
-    if (RenderPosY + yo < 0)
-        RenderPosY = 0;
-
-    RenderPosXTo = SCREENSIZE_X + 2;
-    RenderPosYTo = SCREENSIZE_Y + 2;
-
-    if (xo + RenderPosXTo > LEVELSIZE_X)
-        RenderPosXTo = SCREENSIZE_X;
-    if (yo + RenderPosYTo > LEVELSIZE_Y)
-        RenderPosYTo = SCREENSIZE_Y;
-
-    // DKS - Added:
-    if (xo + RenderPosXTo > LEVELSIZE_X)
-        RenderPosXTo = LEVELSIZE_X - xo;
-    if (yo + RenderPosYTo > LEVELSIZE_Y)
-        RenderPosYTo = LEVELSIZE_Y - yo;
-
-    // Sonstige Ausgangswerte berechnen
-    xLevel = xo;
-    yLevel = yo;
-
-    // Offsets der Tiles berechnen (0-19)
-    xTileOffs = static_cast<int>(XOffset) % TILESIZE_X;
-    yTileOffs = static_cast<int>(YOffset) % TILESIZE_Y;
-
-    // DKS - Update the new water sin table indexes before rendering any tiles:
+    // Allocate for the largest batch actually visible, including zoom and shake.
+    const size_t columns = std::max(0, RenderPosXTo - RenderPosX);
+    const size_t rows = std::max(0, RenderPosYTo - RenderPosY);
+    const size_t vertices = columns * rows * 6;
+    if (TilesToRender.size() < vertices)
+        TilesToRender.resize(vertices);
     WaterSinTable.UpdateTableIndexes(xLevel, yLevel);
 }
 
@@ -841,104 +1087,94 @@ void TileEngineClass::CalcRenderRange() {
 // Hintergrund Parallax Layer anzeigen
 // --------------------------------------------------------------------------------------
 
+void TileEngineClass::UpdateBackground() {
+    CloudMovement += Timer.getSpeedFactor();
+    if (CloudMovement >= RENDERWIDTH)
+        CloudMovement -= RENDERWIDTH;
+
+    if (pDragonHack != nullptr && !Console.Showing)
+        pDragonHack->Run();
+}
+
+glm::vec2 TileEngineClass::BackdropCamera(glm::vec2 origin, glm::vec2 viewSize) const {
+    // The parallax artwork was composed around a 640 x 480 view. Its anchor
+    // follows the visible world rectangle, including when that rectangle stops at a wall.
+    return ClampCameraOrigin(origin + (viewSize - glm::vec2(RENDERWIDTH, RENDERHEIGHT)) * 0.5f);
+}
+
 void TileEngineClass::DrawBackground() {
+    const glm::vec2 origin(XOffset + RenderLeft, YOffset);
+    const glm::vec2 size(RenderRight - RenderLeft, RENDERHEIGHT);
+    const auto camera = BackdropCamera(origin, size);
+    DrawBackground(origin - camera, size, camera);
+}
 
-    // Hintergrund nicht rotieren
-    //
-    glm::mat4x4 matView = glm::mat4x4(1.0f);
-    g_matView = matView;
+void TileEngineClass::DrawBackground(glm::vec2 crop, glm::vec2 viewSize, glm::vec2 camera) {
+    // Begin the world pass with no local sprite transform. The projection carries the camera tilt.
+    g_matView = g_matModelView = glm::mat4x4(1.0f);
+#if defined(USE_GL1)
+    load_matrix(GL_MODELVIEW, glm::value_ptr(g_matModelView));
+#endif
 
-    //----- Hintergrund-Bild
+    // Sample at one texel per world unit before projection. The terrain and
+    // parallax use the same zoom, and each pane can crop its own camera view.
+    const auto drawLayer = [](const DirectGraphicsSprite &layer, glm::vec2 position, glm::vec2 size, glm::vec2 source) {
+        if (layer.itsTexIdx < 0 || size.x <= 0.0f || size.y <= 0.0f)
+            return;
+        const auto end = position + size;
+        const glm::vec2 texelScale(layer.itsXTexScale, layer.itsYTexScale);
+        // Keep UVs local even far into a level. Two periods preserve both the
+        // repeated and the mirrored axes without losing sub-texel precision.
+        glm::vec2 uv = source * texelScale;
+        uv.x = std::fmod(uv.x, 2.0f);
+        uv.y = std::fmod(uv.y, 2.0f);
+        const auto uvEnd = uv + size * texelScale;
+        VERTEX2D quad[] = {
+            {position.x, position.y, 0xFFFFFFFF, uv.x,    uv.y},
+            {end.x,      position.y, 0xFFFFFFFF, uvEnd.x, uv.y},
+            {position.x, end.y,      0xFFFFFFFF, uv.x,    uvEnd.y},
+            {end.x,      end.y,      0xFFFFFFFF, uvEnd.x, uvEnd.y},
+        };
+        DirectGraphics.SetTexture(layer.itsTexIdx);
+        DirectGraphics.RendertoBuffer(GL_TRIANGLE_STRIP, 2, quad);
+    };
+    const auto drawScrollingLayer = [&](const DirectGraphicsSprite &layer, float scroll, float y) {
+        const float layerTop = y - crop.y;
+        const float top = std::max(0.0f, layerTop);
+        drawLayer(layer, {RenderLeft, top}, {viewSize.x, viewSize.y - top}, {crop.x + scroll, top - layerTop});
+    };
 
-    if (bScrollBackground)  // Hintergrundbild mitscrollen
-    {
-        int const x_off = static_cast<int>(XOffset / 5.0f) % RENDERWIDTH;
-        // Linke Hälfte
-        Background.SetRect(0, 0, x_off, RENDERHEIGHT);
-        Background.RenderSprite(static_cast<float>(RENDERWIDTH - x_off), 0.0f, 0xFFFFFFFF);
+    // Mirroring the outer rows fills the extra height from zoom without
+    // stretching the artwork or exposing the bottom edges of the layers.
+    DirectGraphics.SetColorKeyMode();
+    const float backgroundScroll = bScrollBackground ? camera.x / 5.0f : 0.0f;
+    drawLayer(Background, {RenderLeft, 0.0f}, viewSize, {crop.x + backgroundScroll, crop.y});
 
-        // Rechte Hälfte
-        Background.SetRect(x_off, 0, RENDERWIDTH, RENDERHEIGHT);
-        Background.RenderSprite(0.0f, 0.0f, 0xFFFFFFFF);
-    } else  // oder statisch ?
-    {
-        Background.SetRect(0, 0, RENDERWIDTH, RENDERHEIGHT);
-        Background.RenderSprite(0.0f, 0.0f, 0xFFFFFFFF);
-    }
-
-    int xoff;
-    float yoff;
-
-    //----- Layer ganz hinten (ausser im Flugsack Level)
-
-    xoff = static_cast<int>(XOffset / 3.0f) % RENDERWIDTH;
-    yoff = static_cast<float>((LEVELSIZE_Y - SCREENSIZE_Y) * TILESIZE_Y);  // Grösse des Levels in Pixeln (-1 Screen)
-    yoff = 220.0f - 150.0f / yoff * YOffset;                               // y-Offset des Layers berechnen
-    yoff -= 40.0f;
-
-    // Linke Hälfte
-    ParallaxLayer[0].SetRect(0, 0, xoff, RENDERHEIGHT);
-    ParallaxLayer[0].RenderSprite(static_cast<float>(RENDERWIDTH - xoff), yoff, 0xFFFFFFFF);
-
-    // Rechte Hälfte
-    ParallaxLayer[0].SetRect(xoff, 0, RENDERWIDTH, RENDERHEIGHT);
-    ParallaxLayer[0].RenderSprite(0.0f, yoff, 0xFFFFFFFF);
-
-    //----- vorletzter Layer
-
-    yoff = static_cast<float>((LEVELSIZE_Y - SCREENSIZE_Y) * TILESIZE_Y);  // Grösse des Levels in Pixeln (-1 Screen)
-    yoff = 200.0f - 200.0f / yoff * YOffset;                               // y-Offset des Layers berechnen
-    xoff = static_cast<int>(XOffset / 2.0f) % RENDERWIDTH;
-
-    // Linke Hälfte
-    ParallaxLayer[1].SetRect(0, 0, xoff, RENDERHEIGHT);
-    ParallaxLayer[1].RenderSprite(static_cast<float>(RENDERWIDTH - xoff), yoff, 0xFFFFFFFF);
-
-    // Rechte Hälfte
-    ParallaxLayer[1].SetRect(xoff, 0, RENDERWIDTH, RENDERHEIGHT);
-    ParallaxLayer[1].RenderSprite(0.0f, yoff, 0xFFFFFFFF);
+    const float scrollHeight = static_cast<float>(std::max(1, (LEVELSIZE_Y - SCREENSIZE_Y) * TILESIZE_Y));
+    drawScrollingLayer(ParallaxLayer[0], camera.x / 3.0f, 180.0f - 150.0f / scrollHeight * camera.y);
+    drawScrollingLayer(ParallaxLayer[1], camera.x / 2.0f, 200.0f - 200.0f / scrollHeight * camera.y);
 
     //----- Im Fahrstuhl-Level noch den vertikalen Parallax-Layer anzeigen
 
-    if (IsElevatorLevel) {
-        int const y_off = static_cast<int>(YOffset / 1.5f) % RENDERHEIGHT;
-
-        // Obere Hälfte
-        ParallaxLayer[2].SetRect(0, 0, RENDERWIDTH, y_off);
-        ParallaxLayer[2].RenderSprite(390.0f - XOffset, static_cast<float>(RENDERHEIGHT - y_off), 0xFFFFFFFF);
-
-        // Untere Hälfte
-        ParallaxLayer[2].SetRect(0, y_off, RENDERWIDTH, RENDERHEIGHT);
-        ParallaxLayer[2].RenderSprite(390.0f - XOffset, 0.0f, 0xFFFFFFFF);
-    }
+    if (IsElevatorLevel)
+        drawLayer(ParallaxLayer[2], {390.0f - XOffset, 0.0f},
+                  {static_cast<float>(ParallaxLayer[2].itsXFrameSize), viewSize.y}, {0.0f, YOffset / 1.5f});
 
     //----- Wolken Layer (Wenn Focus des Level GANZ oben, dann wird er GANZ angezeigt)
 
-    // Wolken bewegen
-    CloudMovement += Timer.getSpeedFactor();
-    if (CloudMovement > RENDERWIDTH)
-        CloudMovement = 0.0f;
-
     DirectGraphics.SetAdditiveMode();
 
-    xoff = static_cast<int>(XOffset / 4.0f + CloudMovement) % RENDERWIDTH;
-    yoff = static_cast<float>((LEVELSIZE_Y - SCREENSIZE_Y) * 40);  // Grösse des Levels in Pixeln (-1 Screen)
-    yoff = 240.0f / yoff * YOffset;               // y-Offset des Layers berechnen
-
-    // Linke Hälfte
-    CloudLayer.SetRect(0, static_cast<int>(yoff), xoff, 240);
-    CloudLayer.RenderSprite(static_cast<float>(RENDERWIDTH - xoff), 0.0f, 0xFFFFFFFF);
-
-    // Rechte Hälfte
-    CloudLayer.SetRect(xoff, static_cast<int>(yoff), RENDERWIDTH, 240);
-    CloudLayer.RenderSprite(0.0f, 0.0f, 0xFFFFFFFF);
+    const float cloudTop = std::clamp(120.0f / scrollHeight * camera.y, 0.0f, 240.0f);
+    const float cloudHeight = std::min(viewSize.y, 240.0f - cloudTop - crop.y);
+    drawLayer(CloudLayer, {RenderLeft, 0.0f}, {viewSize.x, cloudHeight},
+              {crop.x + camera.x / 4.0f + CloudMovement, cloudTop + crop.y});
 
     DirectGraphics.SetColorKeyMode();
 
     //----- Dragon Hack
 
     if (pDragonHack != nullptr && !Console.Showing)
-        pDragonHack->Run();
+        pDragonHack->Draw();
 }
 
 // --------------------------------------------------------------------------------------
@@ -1016,10 +1252,7 @@ void TileEngineClass::DrawBackLevel() {
                 float const u = yScreen + TILESIZE_Y;  // Unten
 
                 // Textur-Koordinaten
-                float const tl = Rect.left / TILESETSIZE_X;    // Links
-                float const tr = Rect.right / TILESETSIZE_X;   // Rechts
-                float const to = Rect.top / TILESETSIZE_Y;     // Oben
-                float const tu = Rect.bottom / TILESETSIZE_Y;  // Unten
+                const auto [tl, tr, to, tu] = TileGfx[ActualTexture].FrameUV(Rect);
 
                 // Vertices definieren
                 v1.color = tile.Color[0];
@@ -1178,10 +1411,7 @@ void TileEngineClass::DrawFrontLevel() {
                 float const u = yScreen + TILESIZE_Y;  // Unten
 
                 // Textur-Koordinaten
-                float const tl = Rect.left / TILESETSIZE_X;    // Links
-                float const tr = Rect.right / TILESETSIZE_X;   // Rechts
-                float const to = Rect.top / TILESETSIZE_Y;     // Oben
-                float const tu = Rect.bottom / TILESETSIZE_Y;  // Unten
+                const auto [tl, tr, to, tu] = TileGfx[ActualTexture].FrameUV(Rect);
 
                 // Licht setzen (prüfen auf Overlay light, wegen hellen Kanten)
                 if (tile.Block & BLOCKWERT_OVERLAY_LIGHT) {
@@ -1288,6 +1518,12 @@ void TileEngineClass::DrawFrontLevel() {
 // --------------------------------------------------------------------------------------
 
 void TileEngineClass::ScrollLevel(float x, float y, TileStateEnum neu, float sx, float sy) {
+    wideBossArena = false;
+    if (NUMPLAYERS == 2 && neu == TileStateEnum::SCROLLTOLOCK) {
+        const auto origin = ClampCameraOrigin({x, y});
+        x = origin.x;
+        y = origin.y;
+    }
     ScrolltoX = x;
     ScrolltoY = y;
     SpeedX = sx;
@@ -1361,10 +1597,7 @@ void TileEngineClass::DrawBackLevelOverlay() {
                 float const u = yScreen + TILESIZE_Y;  // Unten
 
                 // Textur-Koordinaten
-                float const tl = Rect.left / TILESETSIZE_X;    // Links
-                float const tr = Rect.right / TILESETSIZE_X;   // Rechts
-                float const to = Rect.top / TILESETSIZE_Y;     // Oben
-                float const tu = Rect.bottom / TILESETSIZE_Y;  // Unten
+                const auto [tl, tr, to, tu] = TileGfx[ActualTexture].FrameUV(Rect);
 
                 // al = tile.Alpha;
 
@@ -1423,6 +1656,7 @@ void TileEngineClass::DrawOverlayLevel() {
 
     // Am Anfang noch keine Textur gewählt
     int ActualTexture = -1;
+    const float movement = 60.0f / 256.0f * std::fmod(WasserfallOffset, 120.0f) / 120.0f;
 
     // x und ypos am screen errechnen
     xScreen = static_cast<float>(-xTileOffs + RenderPosX * TILESIZE_X);
@@ -1537,27 +1771,24 @@ void TileEngineClass::DrawOverlayLevel() {
                     RECT_struct const Rect = TileRects[Type];
 
                     // Textur-Koordinaten
-                    float tl = Rect.left / TILESETSIZE_X;    // Links
-                    float tr = Rect.right / TILESETSIZE_X;   // Rechts
-                    float to = Rect.top / TILESETSIZE_Y;     // Oben
-                    float tu = Rect.bottom / TILESETSIZE_Y;  // Unten
+                    auto [tl, tr, to, tu] = TileGfx[ActualTexture].FrameUV(Rect);
 
                     // bewegtes Tile vertikal
                     if (tile.Block & BLOCKWERT_MOVEVERTICAL) {
-                        to -= 60.0f / 256.0f * WasserfallOffset / 120.0f;
-                        tu -= 60.0f / 256.0f * WasserfallOffset / 120.0f;
+                        to -= movement;
+                        tu -= movement;
                     }
 
                     // bewegtes Tile links
                     if (tile.Block & BLOCKWERT_MOVELINKS) {
-                        tl += 60.0f / 256.0f * WasserfallOffset / 120.0f;
-                        tr += 60.0f / 256.0f * WasserfallOffset / 120.0f;
+                        tl += movement;
+                        tr += movement;
                     }
 
                     // bewegtes Tile rechts
                     if (tile.Block & BLOCKWERT_MOVERECHTS) {
-                        tl -= 60.0f / 256.0f * WasserfallOffset / 120.0f;
-                        tr -= 60.0f / 256.0f * WasserfallOffset / 120.0f;
+                        tl -= movement;
+                        tr -= movement;
                     }
 
                     // al = tile.Alpha;
@@ -1710,10 +1941,6 @@ void TileEngineClass::DrawWater() {
     else {
         // zwei Schichten Wasser rendern
         for (int schicht = 0; schicht < 2; schicht++) {
-            // Offsets der Tiles berechnen (0-19)
-            xTileOffs = static_cast<int>(XOffset) % TILESIZE_X;
-            yTileOffs = static_cast<int>(YOffset) % TILESIZE_Y;
-
             // ypos am screen errechnen
             yScreen = static_cast<float>(-yTileOffs + RenderPosY * TILESIZE_Y);
 
@@ -1813,16 +2040,19 @@ void TileEngineClass::DrawWater() {
                         //    v4.y += WaterList[off + j*10 + i * 2 + 10];
                         if (tile.move_v1 || tile.move_v2 ||
                             tile.move_v3 || tile.move_v4) {
-                            float y_offs[2];
-                            WaterSinTable.GetWaterSin(i, j, y_offs);
+                            // Adjacent tiles must displace their shared
+                            // vertices by the same amount.
+                            float left[2], right[2];
+                            WaterSinTable.GetWaterSin(i, j, left);
+                            WaterSinTable.GetWaterSin(i + 1, j, right);
                             if (tile.move_v1 == true)
-                                v1.y += y_offs[0];
+                                v1.y += left[0];
                             if (tile.move_v2 == true)
-                                v2.y += y_offs[0];
+                                v2.y += right[0];
                             if (tile.move_v3 == true)
-                                v3.y += y_offs[1];
+                                v3.y += left[1];
                             if (tile.move_v4 == true)
-                                v4.y += y_offs[1];
+                                v4.y += right[1];
                         }
 
                         // Zu rendernde Vertices ins Array schreiben
@@ -1857,55 +2087,50 @@ void TileEngineClass::DrawWater() {
         }
     }
 
-    // Wasserfall rendern
-    xScreen = static_cast<float>(-xTileOffs + RenderPosX * TILESIZE_X);
-    yScreen = static_cast<float>(-yTileOffs + RenderPosY * TILESIZE_Y);
-    {
-        for (int j = RenderPosY; j < RenderPosYTo; j++) {
-            xScreen = static_cast<float>(-xTileOffs + RenderPosX * TILESIZE_X);
+    // The two flows scroll through whole texture periods at their original
+    // speeds. Keep the highlight at its authored scale on every viewport.
+    const D3DCOLOR waterfallColors[] = {Col1, Col2, D3DCOLOR_RGBA(180, 240, 255, 60)};
+    DirectGraphics.SetColorKeyMode();
+    for (int layer = 0; layer < 3; ++layer) {
+        const bool highlight = layer == 2;
+        const auto &texture = Wasserfall[highlight ? 1 : 0];
+        const auto color = waterfallColors[layer];
+        const float scrollY = WasserfallOffset / (layer + 1);
+        size_t vertexCount = 0;
+        for (int j = RenderPosY; j < RenderPosYTo; ++j) {
+            const int tileY = j + yLevel;
+            const float top = static_cast<float>(j * TILESIZE_Y - yTileOffs);
+            for (int i = RenderPosX; i < RenderPosXTo; ++i) {
+                const int tileX = i + xLevel;
+                if (!(TileAt(tileX, tileY).Block & BLOCKWERT_WASSERFALL))
+                    continue;
 
-            for (int i = RenderPosX; i < RenderPosXTo; i++) {
-                // Ist ein Wasserfall teil?
-                if (TileAt(i + xLevel, j + yLevel).Block & BLOCKWERT_WASSERFALL) {
-                    DirectGraphics.SetColorKeyMode();
-                    // Drei Schichten Wasserfall rendern =)
-                    //
-
-                    // Schicht 1
-                    //
-                    int xoff = (i + xLevel) % 3 * TILESIZE_X;
-                    int yoff = (j + yLevel) % 3 * TILESIZE_Y + 120 - static_cast<int>(WasserfallOffset);
-
-                    Wasserfall[0].SetRect(xoff, yoff, xoff + TILESIZE_X, yoff + TILESIZE_Y);
-                    Wasserfall[0].RenderSprite(static_cast<float>(i * TILESIZE_X - xTileOffs),
-                                               static_cast<float>(j * TILESIZE_Y - yTileOffs), Col1);
-
-                    // Schicht 2
-                    //
-                    xoff = (i + xLevel + 1) % 3 * TILESIZE_X;
-                    yoff = (j + yLevel) % 3 * TILESIZE_Y + 120 - static_cast<int>(WasserfallOffset / 2.0f);
-
-                    Wasserfall[0].SetRect(xoff, yoff, xoff + TILESIZE_X, yoff + TILESIZE_Y);
-                    Wasserfall[0].RenderSprite(static_cast<float>(i * TILESIZE_X - xTileOffs),
-                                               static_cast<float>(j * TILESIZE_Y - yTileOffs), Col2);
-
-                    // Glanzschicht (Schicht 3) drüber
-                    //
-                    Wasserfall[1].SetRect((i * TILESIZE_X - xTileOffs) % RENDERWIDTH,
-                                          (j * TILESIZE_Y - yTileOffs) % RENDERHEIGHT,
-                                          (i * TILESIZE_X - xTileOffs) % RENDERWIDTH + TILESIZE_X,
-                                          (j * TILESIZE_Y - yTileOffs) % RENDERHEIGHT + TILESIZE_Y);
-
-                    Wasserfall[1].RenderSprite(static_cast<float>(i * TILESIZE_X - xTileOffs),
-                                               static_cast<float>(j * TILESIZE_Y - yTileOffs),
-                                               D3DCOLOR_RGBA(180, 240, 255, 60));
-                }
-
-                xScreen += TILESIZE_X;  // Am Screen weiter
+                const float left = static_cast<float>(i * TILESIZE_X - xTileOffs);
+                const float right = left + TILESIZE_X;
+                const float bottom = top + TILESIZE_Y;
+                constexpr int tilesPerStrip = waterfallWidth / TILESIZE_X;
+                const float textureX = highlight ? left : (tileX + layer) % tilesPerStrip * TILESIZE_X;
+                const float textureY = highlight ? top : tileY % tilesPerStrip * TILESIZE_Y + waterfallHeight / 2 - scrollY;
+                const float u0 = textureX * texture.itsXTexScale;
+                const float u1 = (textureX + TILESIZE_X) * texture.itsXTexScale;
+                const float v0 = textureY * texture.itsYTexScale;
+                const float v1 = (textureY + TILESIZE_Y) * texture.itsYTexScale;
+                const VERTEX2D upperLeft{left, top, color, u0, v0};
+                const VERTEX2D upperRight{right, top, color, u1, v0};
+                const VERTEX2D lowerLeft{left, bottom, color, u0, v1};
+                const VERTEX2D lowerRight{right, bottom, color, u1, v1};
+                TilesToRender[vertexCount++] = upperLeft;
+                TilesToRender[vertexCount++] = upperRight;
+                TilesToRender[vertexCount++] = lowerLeft;
+                TilesToRender[vertexCount++] = lowerLeft;
+                TilesToRender[vertexCount++] = upperRight;
+                TilesToRender[vertexCount++] = lowerRight;
             }
-
-            yScreen += TILESIZE_Y;  // Am Screen weiter
         }
+        if (vertexCount == 0)
+            break;
+        DirectGraphics.SetTexture(texture.itsTexIdx);
+        DirectGraphics.RendertoBuffer(GL_TRIANGLES, vertexCount / 3, TilesToRender.data());
     }
 
     DirectGraphics.SetFilterMode(false);
@@ -1915,13 +2140,20 @@ void TileEngineClass::DrawWater() {
 // Grenzen checken
 // --------------------------------------------------------------------------------------
 
-void TileEngineClass::CheckBounds() {
+glm::vec2 TileEngineClass::ClampCameraOrigin(glm::vec2 origin) const {
     constexpr float xtilesize = static_cast<float>(TILESIZE_X);
     constexpr float ytilesize = static_cast<float>(TILESIZE_Y);
 
-    // Grenzen des Levels checken
-    XOffset = std::clamp(XOffset, xtilesize, LEVELPIXELSIZE_X - RENDERWIDTH - xtilesize);
-    YOffset = std::clamp(YOffset, ytilesize, LEVELPIXELSIZE_Y - RENDERHEIGHT - ytilesize);
+    return {
+        std::clamp(origin.x, xtilesize, std::max(xtilesize, LEVELPIXELSIZE_X - RENDERWIDTH - xtilesize)),
+        std::clamp(origin.y, ytilesize, std::max(ytilesize, LEVELPIXELSIZE_Y - RENDERHEIGHT - ytilesize))
+    };
+}
+
+void TileEngineClass::CheckBounds() {
+    const auto origin = ClampCameraOrigin({XOffset, YOffset});
+    XOffset = origin.x;
+    YOffset = origin.y;
 }
 
 // --------------------------------------------------------------------------------------
@@ -1958,6 +2190,8 @@ void TileEngineClass::WertAngleichen(float &nachx, float &nachy, float vonx, flo
 // --------------------------------------------------------------------------------------
 
 void TileEngineClass::UpdateLevel() {
+    if (Zustand == TileStateEnum::SCROLLBAR)
+        wideBossArena = false;
     if (Console.Showing)
         return;
 
@@ -2037,23 +2271,13 @@ void TileEngineClass::UpdateLevel() {
 
     // Level-Ausschnitt zum Spieler Scrollen
     if (Zustand == TileStateEnum::SCROLLTOPLAYER) {
-        if (NUMPLAYERS == 1) {
-            ScrolltoX = Player[0].xpos;
-            ScrolltoY = Player[0].ypos;
+        if (CoopNeedsPartner()) {
+            ScrolltoX = (Player[0].xpos + Player[1].xpos) * 0.5f;
+            ScrolltoY = (Player[0].ypos + Player[1].ypos) * 0.5f;
         } else {
-            if (Player[0].Lives <= 0) {
-                ScrolltoX = Player[1].xpos;
-                ScrolltoY = Player[1].ypos;
-            } else if (Player[1].Lives <= 0) {
-                ScrolltoX = Player[0].xpos;
-                ScrolltoY = Player[0].ypos;
-            } else {
-                float const xdist = Player[1].xpos - Player[0].xpos;
-                float const ydist = Player[1].ypos - Player[0].ypos;
-
-                ScrolltoX = Player[0].xpos + 35.0f + xdist / 2.0f - 320.0f;
-                ScrolltoY = Player[0].ypos + 40.0f + ydist / 2.0f - 240.0f;
-            }
+            const auto &focus = Player[NUMPLAYERS == 2 && Player[0].Handlung == PlayerActionEnum::TOT ? 1 : 0];
+            ScrolltoX = focus.xpos;
+            ScrolltoY = focus.ypos;
         }
 
         bool isScrolling = false;
@@ -2157,8 +2381,9 @@ void TileEngineClass::UpdateLevel() {
     // Wasserfall animieren
     WasserfallOffset += Timer.sync(16.0f);
 
-    while (WasserfallOffset >= 120.0f)
-        WasserfallOffset -= 120.0f;
+    // The slower flow runs at half speed, so wrap once both layers repeat.
+    while (WasserfallOffset >= waterfallHeight * 2)
+        WasserfallOffset -= waterfallHeight * 2;
 
     /* DKS - Replaced both SinList2 and WaterList lookup tables with new
              class WaterSinTableClass.  See comments in Tileengine.h */
@@ -2181,6 +2406,31 @@ void TileEngineClass::UpdateLevel() {
 
     if (NewYOffset != -1.0f)
         YOffset = NewYOffset;
+
+    if (HasFreeCoopCamera() && levelSplitScreenType == SplitScreenType::OneScreen &&
+        CoopPlayerReady(Player[0]) && CoopPlayerReady(Player[1])) {
+        // Keep a stationary partner on screen as the camera's dead zone follows the leader.
+        const float width = DirectGraphics.GetViewWidth();
+        const float left = XOffset + CalculateViewLeft();
+        const float minX = std::max(Player[0].xpos, Player[1].xpos) + PLAYER_FRAME_WIDTH - width;
+        const float maxX = std::min(Player[0].xpos, Player[1].xpos);
+        if (minX <= maxX && (left < minX || left > maxX))
+            XOffset = std::clamp(left, minX, maxX) - DirectGraphics.InterfaceLeft();
+        const float minY = std::max(Player[0].ypos, Player[1].ypos) + PLAYER_FRAME_HEIGHT - RENDERHEIGHT;
+        const float maxY = std::min(Player[0].ypos, Player[1].ypos);
+        if (minY <= maxY)
+            YOffset = std::clamp(YOffset, minY, maxY);
+    } else if (CanSplitCoop() && !IsCoopSplit() &&
+               Player[0].Handlung != PlayerActionEnum::TOT && Player[1].Handlung != PlayerActionEnum::TOT) {
+        // Keep both sprites inside the shared view while the regular camera catches up.
+        const float halfWidth = DirectGraphics.GetViewWidth() / 2.0f;
+        const float centerX = (Player[0].xpos + Player[1].xpos) / 2.0f + 35.0f - RENDERWIDTH / 2;
+        const float centerY = (Player[0].ypos + Player[1].ypos) / 2.0f + 40.0f - RENDERHEIGHT / 2;
+        const float slackX = std::max(0.0f, halfWidth - 48.0f - std::abs(Player[0].xpos - Player[1].xpos) / 2.0f);
+        const float slackY = std::max(0.0f, RENDERHEIGHT / 2 - 48.0f - std::abs(Player[0].ypos - Player[1].ypos) / 2.0f);
+        XOffset = std::clamp(XOffset, centerX - slackX, centerX + slackX);
+        YOffset = std::clamp(YOffset, centerY - slackY, centerY + slackY);
+    }
 }
 
 // --------------------------------------------------------------------------------------
@@ -2708,6 +2958,110 @@ bool TileEngineClass::BlockDestroyUnten(float &x, float &y, float &xo, float &yo
 }
 #endif  // 0
 // DKS - BEGIN REWRITTEN VERSIONS OF ABOVE FUNCTIONS:
+namespace {
+struct TileSpan {
+    int begin;
+    int end;
+};
+
+TileSpan TilesOverlapping(float begin, float end, int tileSize, int levelSize) {
+    if (begin >= end)
+        return {0, 0};
+    return {std::clamp(static_cast<int>(std::floor(begin / tileSize)), 0, levelSize),
+            std::clamp(static_cast<int>(std::ceil(end / tileSize)), 0, levelSize)};
+}
+}
+
+bool TileEngineClass::OverlapsSolidWall(float x, float y, const RECT_struct &rect) const {
+    const auto columns = TilesOverlapping(x + rect.left, x + rect.right, TILESIZE_X, LEVELSIZE_X);
+    const auto rows = TilesOverlapping(y + rect.top, y + rect.bottom, TILESIZE_Y, LEVELSIZE_Y);
+    for (int column = columns.begin; column < columns.end; ++column)
+        for (int row = rows.begin; row < rows.end; ++row)
+            if (Tiles[column][row].Block & BLOCKWERT_WAND)
+                return true;
+    return false;
+}
+
+float TileEngineClass::ClipWallMotion(float from, float to, float perpendicular,
+                                      const RECT_struct &rect, bool horizontal, uint32_t blocking) const {
+    if (from == to)
+        return to;
+
+    const bool forward = to > from;
+    const int edge = horizontal ? (forward ? rect.right : rect.left) : (forward ? rect.bottom : rect.top);
+    const float oldEdge = from + edge;
+    const float newEdge = to + edge;
+    const int stepSize = horizontal ? TILESIZE_X : TILESIZE_Y;
+    const auto path = TilesOverlapping(std::min(oldEdge, newEdge), std::max(oldEdge, newEdge),
+                                        stepSize, horizontal ? LEVELSIZE_X : LEVELSIZE_Y);
+    const auto side = horizontal
+        ? TilesOverlapping(perpendicular + rect.top, perpendicular + rect.bottom, TILESIZE_Y, LEVELSIZE_Y)
+        : TilesOverlapping(perpendicular + rect.left, perpendicular + rect.right, TILESIZE_X, LEVELSIZE_X);
+    const int direction = forward ? 1 : -1;
+    const int stop = forward ? path.end : path.begin - 1;
+    for (int tile = forward ? path.begin : path.end - 1; tile != stop; tile += direction) {
+        const int wallEdge = (forward ? tile : tile + 1) * stepSize;
+        // Only block boundaries crossed by the leading edge during this step.
+        if ((wallEdge - oldEdge) * direction < 0.0f)
+            continue;
+        for (int other = side.begin; other < side.end; ++other)
+            if (Tiles[horizontal ? tile : other][horizontal ? other : tile].Block & blocking)
+                return static_cast<float>(wallEdge - edge);
+    }
+    return to;
+}
+
+float TileEngineClass::ClipVerticalMotion(float from, float to, float x, const RECT_struct &rect) const {
+    if (to <= from)
+        return ClipWallMotion(from, to, x, rect, false);
+
+    float result = ClipWallMotion(from, to, x, rect, false, BLOCKWERT_WAND | BLOCKWERT_PLATTFORM);
+    const float left = x + rect.left;
+    const float right = x + rect.right;
+    const auto columns = TilesOverlapping(left, right, TILESIZE_X, LEVELSIZE_X);
+    const auto rows = TilesOverlapping(from + rect.bottom + 1.0f, result + rect.bottom + 1.0f,
+                                      TILESIZE_Y, LEVELSIZE_Y);
+    for (int row = rows.begin; row < rows.end; ++row) {
+        for (int col = columns.begin; col < columns.end; ++col) {
+            const auto block = Tiles[col][row].Block;
+            const float tileLeft = static_cast<float>(col * TILESIZE_X);
+            const float tileRight = tileLeft + TILESIZE_X;
+            float rise;
+            if (block & BLOCKWERT_SCHRAEGE_L)
+                rise = std::max(left, tileLeft) - tileLeft;
+            else if (block & BLOCKWERT_SCHRAEGE_R)
+                rise = tileRight - std::min(right, tileRight);
+            else
+                continue;
+            const float surface = row * TILESIZE_Y + rise - rect.bottom - 1.0f;
+            if (surface >= from && surface < result)
+                result = surface;
+        }
+    }
+    return result;
+}
+
+float TileEngineClass::ResolveFloorOverlap(float x, float y, const RECT_struct &rect) const {
+    // An authored enemy can start with its feet inside the top of a solid tile.
+    const float floorY = std::floor((y + rect.bottom) / TILESIZE_Y) * TILESIZE_Y - rect.bottom;
+    if (ClipWallMotion(floorY, y, x, rect, false) < y && !OverlapsSolidWall(x, floorY, rect))
+        return floorY;
+    return y;
+}
+
+uint32_t TileEngineClass::GroundContact(float x, float y, const RECT_struct &rect) const {
+    const float feet = y + rect.bottom;
+    const int row = static_cast<int>(std::floor(feet / TILESIZE_Y));
+    if (row < 0 || row >= LEVELSIZE_Y || feet != row * TILESIZE_Y)
+        return 0;
+
+    const auto columns = TilesOverlapping(x + rect.left, x + rect.right, TILESIZE_X, LEVELSIZE_X);
+    uint32_t blocks = 0;
+    for (int column = columns.begin; column < columns.end; ++column)
+        blocks |= Tiles[column][row].Block & (BLOCKWERT_WAND | BLOCKWERT_PLATTFORM | BLOCKWERT_GEGNERWAND);
+    return blocks;
+}
+
 // --------------------------------------------------------------------------------------
 // Zurückliefern, welche BlockArt sich Rechts vom übergebenen Rect befindet
 // --------------------------------------------------------------------------------------
@@ -2723,14 +3077,8 @@ uint32_t TileEngineClass::BlockRechts(float &x, float y, float &xo, float yo, RE
 
     uint32_t block = 0;
 
-    for (int j = rect.top; j < rect.bottom; j += TILESIZE_Y) {
-        int ylev = static_cast<int>((y + j) * (1.0f / TILESIZE_Y));
-
-        if (ylev < 0)
-            continue;
-        else if (ylev >= LEVELSIZE_Y)
-            break;
-
+    const auto rows = TilesOverlapping(y + rect.top, y + rect.bottom, TILESIZE_Y, LEVELSIZE_Y);
+    for (int ylev = rows.begin; ylev < rows.end; ++ylev) {
         bool blockWand = block & BLOCKWERT_WAND;
 
         if (!blockWand) {
@@ -2799,14 +3147,8 @@ uint32_t TileEngineClass::BlockLinks(float &x, float y, float &xo, float yo, REC
 
     uint32_t block = 0;
 
-    for (int j = rect.top; j < rect.bottom; j += TILESIZE_Y) {
-        int ylev = static_cast<int>((y + j) * (1.0f / TILESIZE_Y));
-
-        if (ylev < 0)
-            continue;
-        else if (ylev >= LEVELSIZE_Y)
-            break;
-
+    const auto rows = TilesOverlapping(y + rect.top, y + rect.bottom, TILESIZE_Y, LEVELSIZE_Y);
+    for (int ylev = rows.begin; ylev < rows.end; ++ylev) {
         bool blockWand = block & BLOCKWERT_WAND;
 
         if (!blockWand) {
@@ -2874,13 +3216,8 @@ uint32_t TileEngineClass::BlockOben(float x, float &y, float xo, float &yo, RECT
 
     uint32_t block = 0;
 
-    for (int i = rect.left; i < rect.right; i += TILESIZE_X) {
-        int xlev = static_cast<int>((x + i) * (1.0f / TILESIZE_X));
-        if (xlev < 0)
-            continue;
-        else if (xlev >= LEVELSIZE_X)
-            break;
-
+    const auto columns = TilesOverlapping(x + rect.left, x + rect.right, TILESIZE_X, LEVELSIZE_X);
+    for (int xlev = columns.begin; xlev < columns.end; ++xlev) {
         bool blockWand = block & BLOCKWERT_WAND;
 
         if (!blockWand) {
@@ -3013,8 +3350,9 @@ uint32_t TileEngineClass::BlockUnten(float x, float &y, float xo, float &yo, REC
         }
 
         if (blockWand || blockPlatform) {
-            if (resolve) {
-                y = static_cast<float>(ylev * TILESIZE_Y - rect.bottom);
+            const float contactY = static_cast<float>(ylev * TILESIZE_Y - rect.bottom);
+            if (resolve && !OverlapsSolidWall(x, contactY, rect)) {
+                y = contactY;
                 yo = y;
             }
 
@@ -3160,7 +3498,7 @@ uint32_t TileEngineClass::BlockSlopes(const float x, float &y, const RECT_struct
             if (block & BLOCKWERT_SCHRAEGE_L) {
                 float newy = static_cast<float>((ylev + 1) * TILESIZE_Y - rect.bottom -
                     (TILESIZE_Y - (static_cast<int>(x + i) % TILESIZE_X)) - 1);
-                if (ySpeed == 0.0f || y > newy) {
+                if (ySpeed == 0.0f || y + 1.0f >= newy) {
                     y = newy;
                     return block;
                 }
@@ -3184,7 +3522,7 @@ uint32_t TileEngineClass::BlockSlopes(const float x, float &y, const RECT_struct
             if (block & BLOCKWERT_SCHRAEGE_R) {
                 float newy = static_cast<float>((ylev + 1) * TILESIZE_Y - rect.bottom -
                     (static_cast<int>(x + i) % TILESIZE_X) - 1);
-                if (ySpeed == 0.0f || y > newy) {
+                if (ySpeed == 0.0f || y + 1.0f >= newy) {
                     y = newy;
                     return block;
                 }
@@ -3361,15 +3699,16 @@ void TileEngineClass::ComputeCoolLight() {
 // "Taschenlampen" Ausschnitt im Alien Level rendern
 // --------------------------------------------------------------------------------------
 
-void TileEngineClass::DrawShadow() {
+void TileEngineClass::DrawShadow(int viewPlayer) {
     if (!bDrawShadow)
         return;
 
     float x, y;
 
-    if (NUMPLAYERS == 1) {
-        x = Player[0].xpos + 35.0f - 512.0f - XOffset;
-        y = Player[0].ypos + 40.0f - 512.0f - YOffset;
+    if (NUMPLAYERS == 1 || viewPlayer >= 0) {
+        const auto &player = Player[NUMPLAYERS == 1 ? 0 : viewPlayer];
+        x = player.xpos + 35.0f - 512.0f - XOffset;
+        y = player.ypos + 40.0f - 512.0f - YOffset;
     } else {
         x = XOffset + 320.0f;
         y = YOffset + 240.0f;
@@ -3386,10 +3725,16 @@ void TileEngineClass::DrawShadow() {
     col = D3DCOLOR_RGBA(0, 0, 0, static_cast<int>(ShadowAlpha));
 
     // Seitenränder
-    RenderRect(x - 200, y - 200, 1420, 200, col);
-    RenderRect(x - 200, y + 1420, 1420, 200, col);
-    RenderRect(x - 200, y, 200, 1024, col);
-    RenderRect(x + 1024, y, 200, 1024, col);
+    const float width = RenderRight - RenderLeft;
+    const float top = std::clamp(y, 0.0f, static_cast<float>(RenderHeight));
+    const float bottom = std::clamp(y + 1024, 0.0f, static_cast<float>(RenderHeight));
+    const float left = std::clamp(x, RenderLeft, RenderRight);
+    const float right = std::clamp(x + 1024, RenderLeft, RenderRight);
+
+    RenderRect(RenderLeft, 0, width, top, col);
+    RenderRect(RenderLeft, bottom, width, RenderHeight - bottom, col);
+    RenderRect(RenderLeft, top, left - RenderLeft, bottom - top, col);
+    RenderRect(right, top, RenderRight - right, bottom - top, col);
 }
 
 // --------------------------------------------------------------------------------------

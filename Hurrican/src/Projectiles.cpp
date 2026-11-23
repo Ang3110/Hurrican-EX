@@ -1828,7 +1828,7 @@ void ProjectileClass::CheckCollision() {
                  pEnemy->GegnerArt == SCHLEUSEH || pEnemy->GegnerArt == SCHLEUSEV)) {
                 // blinken lassen, wenn noch nicht blinkt
                 if (pEnemy->DamageTaken <= 0.0f)
-                    pEnemy->DamageTaken = 255.0f;
+                    pEnemy->RegisterHit(DamagePlayer ? nullptr : pParent);
 
                 float BossZiehtWenigerAb = 1.0f;
 
@@ -1922,9 +1922,6 @@ void ProjectileClass::Render() {
 
     if (!OwnDraw) {
 
-        float const xts = ProjectileGrafix[ShotArt].itsXTexScale;
-        float const yts = ProjectileGrafix[ShotArt].itsYTexScale;
-
         // DKS - There is no need to compute this, it's already in the sprite's itsPreCalcedRects array:
         // int xfs, yfs, xfc
         // xfs = ProjectileGrafix[ShotArt].itsXFrameSize;
@@ -1946,10 +1943,7 @@ void ProjectileClass::Render() {
         float u = -TileEngine.YOffset + yPos + (Rect.bottom - Rect.top - 1) + 0.5f;  // Unten
 
         // Textur Koordinaten
-        float tl = Rect.left * xts;    // Links
-        float tr = Rect.right * xts;   // Rechts
-        float to = Rect.top * yts;     // Oben
-        float tu = Rect.bottom * yts;  // Unten
+        const auto [tl, tr, to, tu] = ProjectileGrafix[ShotArt].FrameUV(Rect);
 
         D3DCOLOR Color = 0xFFFFFFFF;
 
@@ -2098,8 +2092,6 @@ void ProjectileClass::Render() {
     // Druckwellen Smartbomb anzeigen
     else if (ShotArt == SMARTBOMB) {
         DirectGraphics.SetAdditiveMode();
-        ShotRect[ShotArt].bottom = (255 - Damage / 2) * 2;
-        ShotRect[ShotArt].right = (255 - Damage / 2) * 2;
 
         D3DCOLOR Color = D3DCOLOR_RGBA(255, 255, 255, Damage / 2);
         ProjectileGrafix[ShotArt].RenderSpriteScaled(xPos - TileEngine.XOffset, yPos - TileEngine.YOffset,
@@ -2122,11 +2114,7 @@ void ProjectileClass::Render() {
 
     // Fetter Spinnenlaser
     else if (ShotArt == SPIDERLASER) {
-        static float off = 0.0f;
-
         DirectGraphics.SetAdditiveMode();
-        ShotRect[ShotArt].bottom = 0;
-        ShotRect[ShotArt].right = 0;
 
         D3DCOLOR col;
         float size;
@@ -2138,21 +2126,10 @@ void ProjectileClass::Render() {
             size = 10.0f;
             col = D3DCOLOR_RGBA(255, 255, 255, static_cast<int>(AnimCount / 45.0f * 255.0f));
 
-            ShotRect[SPIDERLASER].left = 0;
-            ShotRect[SPIDERLASER].right = 0;
-            ShotRect[SPIDERLASER].top = 0;
-            ShotRect[SPIDERLASER].bottom = 0;
         } else {
             length = 560;
-            size = (7.0f) * 30.0f + sin(off) * 10.0f;
-            off += Timer.sync(5.0f);
+            size = 210.0f + sin((AnimCount - 45.0f) * 2.0f) * 10.0f;
             col = 0xFFFFFFFF;
-
-            ShotRect[SPIDERLASER].left = 0;
-            ShotRect[SPIDERLASER].right = 500;
-            ShotRect[SPIDERLASER].top = -100;
-            ShotRect[SPIDERLASER].bottom = 100;
-            Damage = 500;
         }
 
         ProjectileGrafix[ShotArt].RenderSpriteScaled(
@@ -2265,9 +2242,13 @@ void ProjectileClass::Render() {
                                                      64, 0xCC0088FF);
         }
 
-        else if (ShotArt == WALKER_LASER)
-            Projectiles.LavaFlare.RenderSprite(xPos - 45.0f - TileEngine.XOffset, yPos - 60.0f - TileEngine.YOffset, 0,
-                                               0xAAFF3300);
+        else if (ShotArt == WALKER_LASER) {
+            constexpr int glowSize = 88;
+            const float glowX = xPos + 16.0f - TileEngine.XOffset - glowSize / 2.0f;
+            const float glowY = yPos + 1.5f - TileEngine.YOffset - glowSize / 2.0f;
+            Projectiles.LavaFlare.RenderSpriteScaled(glowX, glowY, glowSize, glowSize, 0,
+                                                     D3DCOLOR_RGBA(255, 51, 0, 76));
+        }
 
         else if (ShotArt == FETTESPINNESHOT || ShotArt == FETTESPINNESHOT2)  // Laser der fetten Spinne
         {
@@ -2321,8 +2302,9 @@ void ProjectileClass::Run() {
     // Screen verlassen ?
     if (ShotArt != FLAMME && ShotArt != ROCKETSPIDER && ShotArt != EVILBLITZ && ShotArt != EVILBLITZ2 &&
         ShotArt != SNOWBOMB && ShotArt != EIERBOMBE &&
-        (yPos - TileEngine.YOffset > RENDERHEIGHT + 100 || yPos - TileEngine.YOffset + ShotRect[ShotArt].bottom < 0 - 100 ||
-         xPos - TileEngine.XOffset > RENDERWIDTH + 100 || xPos - TileEngine.XOffset + ShotRect[ShotArt].right < 0 - 100))
+        !TileEngine.IsInPlayerViews(xPos - 100.0f, yPos - 100.0f,
+                                     xPos + ShotRect[ShotArt].right + 100.0f,
+                                     yPos + ShotRect[ShotArt].bottom + 100.0f))
         Damage = 0;
 
     // Level verlassen ?
@@ -3994,7 +3976,7 @@ void ProjectileClass::ExplodeShot() {
                 {
                     // blinken lassen, wenn noch nicht blinkt
                     if (pEnemy->DamageTaken <= 0.0f)
-                        pEnemy->DamageTaken = 255;
+                        pEnemy->RegisterHit(DamagePlayer ? nullptr : pParent);
 
                     pEnemy->Energy -= (schaden - Abstand) * 1.5f;  // Dann Energy abziehen je nach Abstand
                 }
@@ -4076,12 +4058,10 @@ void ProjectileClass::ExplodeShot() {
 
             PartikelSystem.PushPartikel(xPos - 128.0f, yPos - 128.0f, GRENADEFLARE);
 
-            ShakeScreen(5);
+            ShakeScreen(5, xPos, yPos, true);
             Gegner.DamageEnemiesonScreen(xPos, yPos, 400);
             TileEngine.ExplodeWalls(static_cast<int>(xPos) / 20, static_cast<int>(yPos) / 20);
 
-            for (int p = 0; p < NUMPLAYERS; p++)
-                DirectInput.Joysticks[Player[p].JoystickIndex].ForceFeedbackEffect(FFE_MEDIUMRUMBLE);
 
         } break;
 
@@ -4863,7 +4843,20 @@ int ProjectileListClass::GetNumProjectiles() const {
 // Alle Proectile der Liste animieren und bewegen
 // --------------------------------------------------------------------------------------
 
-void ProjectileListClass::DoProjectiles() {
+void ProjectileClass::UpdateCollisionRect() {
+    if (ShotArt == SMARTBOMB) {
+        ShotRect[ShotArt].right = ShotRect[ShotArt].bottom = (255 - Damage / 2) * 2;
+    } else if (ShotArt == SPIDERLASER) {
+        if (AnimCount < 45.0f) {
+            ShotRect[ShotArt] = {0, 0, 0, 0};
+        } else {
+            ShotRect[ShotArt] = {0, -100, 500, 100};
+            Damage = 500;
+        }
+    }
+}
+
+void ProjectileListClass::DoProjectiles(bool draw) {
     CurrentShotTexture = -1; // Aktuelle Textur gibt es noch keine
 
     ClearDeadProjectiles();
@@ -4873,11 +4866,19 @@ void ProjectileListClass::DoProjectiles() {
             projectile->Run();
         }
         if (projectile->Damage > 0) {
-            projectile->Render();
+            projectile->UpdateCollisionRect();
+            if (draw)
+                projectile->Render();
 
             if (!Console.Showing) {
                 projectile->CheckCollision();
             }
         }
     }
+}
+
+void ProjectileListClass::DrawProjectiles() {
+    CurrentShotTexture = -1;
+    for (auto *projectile : projectiles)
+        projectile->Render();
 }

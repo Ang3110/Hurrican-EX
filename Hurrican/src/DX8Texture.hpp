@@ -11,6 +11,14 @@
 #include "SDLPort/SDL_port.hpp"
 #include "Globals.hpp"
 
+// Transparent padding separates neighboring glyphs when they are filtered.
+constexpr int FontAtlasPadding = 2;
+constexpr int FontAtlasStride(int glyphSize) {
+    return (glyphSize + 2 * FontAtlasPadding + 3) / 4 * 4;
+}
+
+enum class TextureLayout;
+
 class TextureHandle {
   public:
     TextureHandle()
@@ -24,6 +32,9 @@ class TextureHandle {
     }
 
     LPDIRECT3DTEXTURE8 tex;
+    GLenum minFilter = GL_NEAREST;
+    bool paddedGlyphs = false;
+    glm::vec2 halfTexel{0.0f};
 #if defined(USE_ETC1)
     LPDIRECT3DTEXTURE8 alphatex;  // ETC1 compression requires a second texture just for alpha-channel
 #endif
@@ -40,7 +51,7 @@ class TexturesystemClass {
     TexturesystemClass() {}
     ~TexturesystemClass() {}
     void Exit();
-    int16_t LoadTexture(const std::string &filename);
+    int16_t LoadTexture(const std::string &filename, TextureLayout layout, SDL_Point glyphSize);
     void UnloadTexture(const int idx);
     void ReadScaleFactorsFiles();
 
@@ -89,7 +100,7 @@ class TexturesystemClass {
     std::map<std::string, std::pair<double, double> > _scalefactors_map;
     void ReadScaleFactorsFile(const std::string &fullpath);
 
-    bool LoadTextureFromFile(const std::string &filename, TextureHandle &th);
+    bool LoadTextureFromFile(const std::string &filename, TextureHandle &th, TextureLayout layout, SDL_Point glyphSize);
 };
 
 // EXTERNS:

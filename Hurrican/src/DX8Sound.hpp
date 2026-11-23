@@ -293,6 +293,7 @@ class SoundManagerClass {
 
     SongClass songs[MAX_SONGS];
     SampleClass sounds[MAX_SOUNDS];
+    float musicMasterGain = 1.0f;
 
     bool InitFMOD(SOUNDMANAGER_PARAMETERS smpp);  // FMOD Init
 
@@ -333,7 +334,6 @@ class SoundManagerClass {
     void StopSongs();  // Alle Songs anhalten
     void StopSounds();
     void SetSongVolume(int nr, float volume);  // Volume im Song setzen
-    void SetAbsoluteSongVolume(int nr, float volume);
 
     // DKS - Added:
     void ResetAllSoundVolumes();

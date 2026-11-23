@@ -29,14 +29,13 @@ class CGUISystem {
     float m_xPos, m_yPos;
     DirectGraphicsSprite m_Rahmen;
     RECT_struct m_BoxSize;
-    char m_BoxText[BOXTEXTLENGTH];
-    int m_BoxLines;
 
     FadeMode m_FadeMode;
     float m_FadingAlpha;
-    int m_TextID;
+    void DrawBoxFrame(float x, float y, int width, int height, D3DCOLOR color);
 
   public:
+    static constexpr int panelOpacity = 200;
     CGUISystem();
     ~CGUISystem();
 
@@ -44,15 +43,14 @@ class CGUISystem {
 
     void Run();
     void RenderBox();
-    void ShowBox(const char Text[BOXTEXTLENGTH], int yoff, int xoff = 320);
-    void ShowBox(int xoff, int yoff, int w, int h);
+    void DrawCompactFrame(const SDL_Rect &bounds, D3DCOLOR color);
+    void DrawTutorialCard(int lesson, int owner, int profile, float opacity, const SDL_Rect &space, bool shared);
+    void ShowSummaryFrame(const SDL_Rect &bounds);
     void HideBox();
     void HideBoxFast();
 
     FadeMode GetFadeMode() const { return m_FadeMode; }
     float GetFadingAlpha() const { return m_FadingAlpha; }
-    void SetTextID(int TextID) { m_TextID = TextID; }
-    int GetTextID() const { return m_TextID; }
 };
 
 // --------------------------------------------------------------------------------------

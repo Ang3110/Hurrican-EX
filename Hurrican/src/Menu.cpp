@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <array>
+#include <cmath>
 #include <string>
 #include "Console.hpp"
 #include "DX8Font.hpp"
@@ -168,20 +169,73 @@ const std::array<D3DCOLOR, MAX_COLORS> HighscoreColors = {
 // Die Credits
 // --------------------------------------------------------------------------------------
 
-int CreditsCount;
-
-// DKS - Made a version of the above credits text array meant for use on
-//      low resolution displays that use text scaling. Long lines are split,
-//      and there's less repeated blank lines.
-int LowResCreditsCount;
-
-#include "creditStrings.hpp"
-
-int tempNUMPLAYERS;
+namespace {
+int pendingPlayers = 1;
+int pendingSkill = SKILL_MEDIUM;
+}
 
 // --------------------------------------------------------------------------------------
 // Konstruktor : Menu Grafiken laden und Werte initialisieren
 // --------------------------------------------------------------------------------------
+
+namespace {
+constexpr int ControlMenuAction(int row) {
+    constexpr int actions[] = {AKTION_LINKS, AKTION_RECHTS, AKTION_DUCKEN, AKTION_OBEN, AKTION_UNTEN,
+                               ACTION_LOOK_LEFT, ACTION_LOOK_RIGHT, AKTION_JUMP, AKTION_SHOOT, AKTION_BLITZ,
+                               AKTION_POWERLINE, AKTION_GRANATE, AKTION_SMARTBOMB, AKTION_WAFFEN_PREV,
+                               AKTION_WAFFEN_CYCLE, AKTION_WAFFE_SPREAD, AKTION_WAFFE_LASER, AKTION_WAFFE_BOUNCE, ACTION_SUMMARY};
+    static_assert(std::size(actions) == MENU_TASTEN_NUM_CONTROLS);
+    if (row < MENU_TASTEN_NUM_NON_CONTROLS || row >= MENU_TASTEN_NUM_LINES)
+        return -1;
+    return actions[row - MENU_TASTEN_NUM_NON_CONTROLS];
+}
+
+const char *ControlActionName(int action) {
+    switch (action) {
+        case ACTION_LOOK_LEFT: return "look left (COOP)";
+        case ACTION_LOOK_RIGHT: return "look right (COOP)";
+        case ACTION_SUMMARY: return "summary board";
+        case AKTION_WAFFEN_PREV: return "cycle weapons left";
+        case AKTION_WAFFEN_CYCLE: return "cycle weapons right";
+        case AKTION_WAFFE_SPREAD: return "select spread";
+        case AKTION_WAFFE_LASER: return "select laser";
+        case AKTION_WAFFE_BOUNCE: return "select bounce";
+        default: return TextArray[TEXT::TASTEN_L + action];
+    }
+}
+
+void MenuCell(DirectGraphicsFont *font, const char *text, float x, float y, float width, float height,
+              D3DCOLOR color, int spacing, float align = 0.0f) {
+    const float length = font->StringLength(text, spacing);
+    const float scale = std::min(1.0f, width / std::max(1.0f, length));
+    const auto saved = matProj;
+    matProj = glm::translate(saved, glm::vec3(x + align * (width - length * scale),
+                         y + (height - font->GetYCharSize() * scale) * 0.5f, 0));
+    matProj = glm::scale(matProj, glm::vec3(scale, scale, 1));
+#if defined(USE_GL1)
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+#endif
+    font->DrawText(0, 0, text, color, spacing);
+    matProj = saved;
+#if defined(USE_GL1)
+    load_matrix(GL_PROJECTION, glm::value_ptr(matProj));
+#endif
+}
+void DrawControlBindings(const PlayerClass &player, const DirectJoystickClass *pad, int action, float x, float y,
+                         float width, int rowHeight, D3DCOLOR color) {
+    std::string labels;
+    for (const auto binding : player.BindingsFor(pad)[action]) {
+        if (binding.kind == BindingKind::Empty) continue;
+        if (!labels.empty()) labels += ", ";
+        labels += binding.Label(pad);
+    }
+    MenuCell(pDefaultFont, labels.empty() ? "-" : labels.c_str(), x, y, width, rowHeight, color, 0);
+}
+
+std::string MenuPrompt(const DirectJoystickClass *pad, MenuPadButton action, int key) {
+    return pad ? InputBinding::Pad(pad->MenuBinding(action)).Label(pad) : InputBinding::Key(key).Label(nullptr);
+}
+}  // namespace
 
 MenuClass::MenuClass() {
     MenuNebel.LoadImage("hurrican_rund.png", 512, 512, 512, 512, 1, 1);
@@ -234,18 +288,6 @@ MenuClass::MenuClass() {
     ShowLanguageInfoCounter = 0.0f;
     control_reassignment_occuring = false;
 
-    // creditscount rausfinden
-    CreditsCount = 0;
-    while (strcmp(Credits[CreditsCount], "#eoc") != 0)
-        CreditsCount++;
-
-    // DKS - Made a version of the above credits text array meant for use on
-    //      low resolution displays that use text scaling. Long lines are split,
-    //      and there's less repeated blank lines.
-    LowResCreditsCount = 0;
-    while (strcmp(LowResCredits[LowResCreditsCount], "#eoc") != 0)
-        LowResCreditsCount++;
-
     // DKS - Initialize NewName with just the cursor char
     strcpy_s(NewName, "_");
 }
@@ -266,7 +308,9 @@ MenuClass::~MenuClass() {
 // --------------------------------------------------------------------------------------
 
 void MenuClass::ShowMenuBack() {
-    MenuNebel.RenderSpriteScaledRotated(-80, -140, 800, 800, ScrollPos, 0xFFFFFFFF);
+    const int size = std::max(800, DirectGraphics.GetViewWidth() + 160);
+    MenuNebel.RenderSpriteScaledRotated((RENDERWIDTH - size) / 2.0f, (RENDERHEIGHT - size) / 2.0f, size, size,
+                                       ScrollPos, 0xFFFFFFFF);
 
     DirectGraphics.SetAdditiveMode();
     DirectGraphics.SetFilterMode(true);
@@ -303,38 +347,40 @@ void MenuClass::ShowMenu() {
 
     ShowMenuBack();
 
-    // DKS - Added lowres support, which has very limited room at bottom:
+    const float viewLeft = DirectGraphics.InterfaceLeft();
+    const int viewWidth = DirectGraphics.GetViewWidth();
+    const float footerY = CommandLineParams.LowRes ? 458.0f : 462.0f;
+    constexpr const char *releaseLabel = "Hurrican-EX 1.0";
+    pDefaultFont->DrawText(viewLeft + 10.0f, footerY, "www.poke53280.de", menucolor, 0);
+    pDefaultFont->DrawText(viewLeft + viewWidth - pDefaultFont->StringLength(releaseLabel, 0) - 10.0f,
+                           footerY, releaseLabel, menucolor, 0);
+
+    // Low-resolution mode has room for the two footer labels.
     if (CommandLineParams.LowRes) {
-        // Under Low-res, don't display controls message at bottom and shift other text up a bit
-        pDefaultFont->DrawText(10.0f, 458, "www.poke53280.de", menucolor, 0);
-        pDefaultFont->DrawText(static_cast<float>(640 - pDefaultFont->StringLength("www.hurrican-game.de", 0) - 10), 458,
-                               "www.hurrican-game.de", menucolor, 0);
 #if defined(GCW)
         // Draw port credit text for Pickle & Senquack
         if (AktuellerZustand == MENUZUSTAND_MAINMENU)
-            pDefaultFont->DrawTextCenterAlign(320.0f, 428, "OpenGL and GCW Zero port by Pickle & Senquack", menucolor,
+            pDefaultFont->DrawTextCenterAlign(320.0f, 428, MenuText("OpenGL and GCW Zero port by Pickle & Senquack"), menucolor,
                                               0);
 #endif
     } else {
-        if (AktuellerZustand != MENUPUNKT_CREDITS && AktuellerZustand != MENUZUSTAND_ENTERNAME)
-
-            pDefaultFont->DrawTextCenterAlign(320.0f, 462, TextArray[TEXT::MENUE_ANLEITUNG], menucolor, 0);
-        pDefaultFont->DrawText(10.0f, 462, "www.poke53280.de", menucolor, 0);
-        pDefaultFont->DrawText(static_cast<float>(640 - pDefaultFont->StringLength("www.hurrican-game.de", 0) - 10), 462,
-                               "www.hurrican-game.de", menucolor, 0);
+        if (AktuellerZustand != MENUPUNKT_CREDITS && AktuellerZustand != MENUZUSTAND_ENTERNAME) {
+            const bool configuring = AktuellerZustand == MENUZUSTAND_TASTEN;
+            const auto &selectedPlayer = Player[CurrentPlayer];
+            const auto *joystick = configuring ? selectedPlayer.GetJoystick() : DirectInput.GetJoystick(lastMenuJoystick);
+            if (!configuring && lastMenuJoystick == -1) joystick = Player[0].GetJoystick();
+            std::string help = MenuText("menu help");
+            ReplaceAll(help, "{nav}", MenuText(joystick ? "pad nav" : "key nav"));
+            ReplaceAll(help, "{ok}", MenuPrompt(joystick, MenuPadButton::Select, DIK_RETURN));
+            ReplaceAll(help, "{back}", MenuPrompt(joystick, MenuPadButton::Back, DIK_ESCAPE));
+            const float inset = std::max(pDefaultFont->StringLength("www.poke53280.de", 0),
+                                         pDefaultFont->StringLength(releaseLabel, 0)) + 16;
+            MenuCell(pDefaultFont, help.c_str(), viewLeft + inset, footerY, viewWidth - 2*inset,
+                     pDefaultFont->GetYCharSize(), menucolor, 0, 0.5f);
+        }
     }
 
-    // graue Linien
-    //
-    /*
-        RenderRect(0, 33, 156, 1, menucolor2);
-        RenderRect(0, 63, 156, 1, menucolor2);
-
-        RenderRect(493, 33, 150, 1, menucolor2);
-        RenderRect(493, 63, 150, 1, menucolor2);
-    */
-
-    RenderRect(0, 455, 640, 1, menucolor2);
+    RenderRect(viewLeft, 455, viewWidth, 1, menucolor2);
 
     // DKS - Do not draw the large "HURRICAN" title graphic when using scaled fonts and the
     //       controls reconfiguration menu is active - there is not enough room otherwise
@@ -354,26 +400,22 @@ void MenuClass::ShowMenu() {
     // Je nach Zustand das richtige Menu anzeigen
     switch (AktuellerZustand) {
         case MENUZUSTAND_MAINMENU: {
-            for (int i = 0; i < 6; i++)
-                if (AktuellerPunkt != i) {
-                    if (i == 1) {
-                        if (Stage == -1)
-                            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + i * 35,
-                                                           TextArray[TEXT::MENUE_SPIEL_STARTEN + i], menucolor3, 2);
-                        else
-                            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + i * 35,
-                                                           TextArray[TEXT::MENUE_SPIEL_STARTEN + i], menucolor2, 2);
-                    } else
-                        pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + i * 35,
-                                                       TextArray[TEXT::MENUE_SPIEL_STARTEN + i], menucolor2, 2);
-                }
-
-            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + AktuellerPunkt * 35,
-                                           TextArray[TEXT::MENUE_SPIEL_STARTEN + AktuellerPunkt], menucolor, 2);
-
+            constexpr int labels[] = {TEXT::MENUE_SPIEL_STARTEN, TEXT::MENUE_SPIEL_FORTSETZEN,
+                TEXT::MENUE_EINSTELLUNGEN, TEXT::MENUE_HIGHSCORES, TEXT::MENUE_CREDITS,
+                TEXT::MENUE_QUIT};
+            int row = 0;
+            for (int i = 0; i <= MENUPUNKT_END; ++i) {
+                if (i == MENUPUNKT_CONTINUEGAME && Stage < 0) continue;
+                pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + (Stage < 0 ? 20 : 4) + row++ * 33, TextArray[labels[i]],
+                                               i == AktuellerPunkt ? menucolor : menucolor2, 2);
+            }
         } break;
-
         case MENUZUSTAND_STARTGAME: {
+            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET, TextArray[TEXT::MENUE_SPIEL_STARTEN], menucolor, 2);
+            for (int row = 0; row < 2; ++row)
+                pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + (row + 2) * 35,
+                    TextArray[row ? TEXT::MENUE_ALTES_SPIEL_FORTSETZEN : TEXT::MENUE_NEUES_SPIEL_STARTEN],
+                    row == AktuellerPunkt ? menucolor : menucolor2, 2);
         } break;
 
         case MENUZUSTAND_VOLUMES: {
@@ -405,10 +447,6 @@ void MenuClass::ShowMenu() {
                 }
             }
 
-            // DKS - Renamed:
-            // SoundManager.ResetAllSongVolumes();
-            SoundManager.ResetAllSoundVolumes();
-
             // Sonstige Menu-Punkte anzeigen
             for (int i = 2; i < 4; i++) {
                 float d2 = static_cast<float>(pMenuFont->StringLength(TextArray[TEXT::SOUND + i], 2));
@@ -432,7 +470,67 @@ void MenuClass::ShowMenu() {
                 pMenuFont->DrawText(320.0f - d / 2.0f, ypos + OFFSET - OFFSET2 + (4 + 2) * 35,
                                     TextArray[TEXT::DETAIL_LOW + options_Detail], menucolor2, 2);
 
+            if (DirectGraphics.SupportsDisplayMenu()) {
+                const auto color = AktuellerPunkt == MENUPUNKT_VOLUMES_DISPLAY ? menucolor : menucolor2;
+                pMenuFont->DrawTextCenterAlign(320.0f, ypos + OFFSET - OFFSET2 + (MENUPUNKT_VOLUMES_DISPLAY + 2) * 35,
+                                               MenuText("DISPLAY"), color, 2);
+            }
+
         } break;  // MENUZUSTAND_VOLUMES
+
+        case MENUZUSTAND_DISPLAY: {
+            constexpr const char *aspects[] = {"AUTO", "16:9", "16:10", "4:3", "STRETCHED 4:3"};
+            static_assert(std::size(aspects) == static_cast<size_t>(DisplayAspect::Count));
+            constexpr const char *labels[] = {"WINDOW MODE", "WIDESCREEN", "SPLITSCREEN TYPE", "RESOLUTION",
+                                              "VSYNC", "TEXTURE FILTERING", "CRT FILTER", "BRIGHTNESS"};
+            static_assert(std::size(labels) == DISPLAY_APPLY);
+            const std::string resolution = pendingDisplay.width > 0
+                ? std::to_string(pendingDisplay.width) + " X " + std::to_string(pendingDisplay.height)
+                : (pendingDisplay.fullscreen ? "DESKTOP" : "DEFAULT");
+            const char *values[] = {pendingDisplay.fullscreen ? "FULLSCREEN" : "WINDOWED",
+                aspects[static_cast<int>(pendingDisplay.aspect)],
+                pendingDisplay.splitScreenType == SplitScreenType::Dynamic ? "DYNAMIC" : "ONE SCREEN",
+                resolution.c_str(), pendingDisplay.vsync ? "ON" : "OFF",
+                pendingDisplay.textureFiltering ? "ON" : "OFF",
+                DirectGraphics.SupportsCrtFilter() ? (pendingDisplay.crt ? "ON" : "OFF") : "UNAVAILABLE"};
+            static_assert(std::size(values) == DISPLAY_BRIGHTNESS);
+
+            pMenuFont->DrawTextCenterAlign(320, 124, MenuText("DISPLAY"), menucolor, 2);
+            const auto output = DirectGraphics.GetOutputResolution();
+            const std::string displayInfo = std::to_string(output.width) + " X " + std::to_string(output.height);
+            pDefaultFont->DrawTextCenterAlign(320, 152, displayInfo.c_str(), menucolor, 0);
+
+            const float margin = viewWidth * 0.12f;
+            const float labelX = viewLeft + margin;
+            const float valueRight = viewLeft + viewWidth - margin;
+            constexpr float firstRow = 168.0f, rowHeight = 27.0f;
+            for (int row = DISPLAY_MODE; row < DISPLAY_APPLY; ++row) {
+                const float y = firstRow + row * rowHeight;
+                const auto color = row == AktuellerPunkt ? menucolor : menucolor2;
+                const float valueWidth = std::max(216.0f, (valueRight - labelX) * 0.42f);
+                MenuCell(pMenuFont, MenuText(labels[row]), labelX, y, valueRight-labelX-valueWidth-8, pMenuFont->GetYCharSize(), color, 2);
+                if (row == DISPLAY_BRIGHTNESS) {
+                    // Use the same frame and white fill as the sound and music controls.
+                    constexpr float scale = 0.60f;
+                    const float x = std::round(valueRight - 360 * scale);
+                    const float top = std::round(y + (pMenuFont->GetYCharSize() - 60 * scale) * 0.5f);
+                    const int fill = 318 * (pendingDisplay.brightnessLevel + 1) / DisplaySettings::brightnessGains.size();
+                    LoadingScreen.RenderSpriteScaled(x, top, 216, 36, color);
+                    LoadingBar.SetRect(0, 0, fill, 19);
+                    LoadingBar.RenderSpriteScaled(x + 13, top + 12, static_cast<int>(std::round(fill * scale)), 12, color);
+                } else
+                    MenuCell(pMenuFont, MenuText(values[row]), valueRight-valueWidth, y, valueWidth, pMenuFont->GetYCharSize(), color, 2, 1);
+            }
+
+            pMenuFont->DrawTextCenterAlign(320, firstRow + DISPLAY_APPLY * rowHeight + 4.0f, MenuText("APPLY"),
+                                           AktuellerPunkt == DISPLAY_APPLY ? menucolor : menucolor2, 2);
+            if (displayStatus && SDL_GetTicks() - displayStatusStarted < 6500u) {
+                pDefaultFont->DrawTextCenterAlign(320, 422, MenuText(displayStatus), menucolor, 0);
+                if (showVsyncWarning)
+                    pDefaultFont->DrawTextCenterAlign(320, 436, MenuText("VSync unavailable on this driver"), menucolor, 0);
+            } else if (pendingDisplay.vsync && DirectGraphics.GetDisplaySettings().vsync && !DirectGraphics.IsVSyncEnabled())
+                pDefaultFont->DrawTextCenterAlign(320, 422, MenuText("VSync unavailable on this driver"), menucolor, 0);
+        } break;
 
         case MENUZUSTAND_LANGUAGE: {
             // DKS - Menu now displays filenames without path or extensions and supports low-resolution
@@ -447,14 +545,7 @@ void MenuClass::ShowMenu() {
             char lang_name[256] = "";
             const int num_lang = LanguageFiles.size();
             for (int i = 0; i < num_lang; i++) {
-                strcpy_s(lang_name, LanguageFiles[i].c_str());
-                // Truncate the extension
-                int trunc_loc = strlen(lang_name) - 4;
-                lang_name[trunc_loc] = '\0';
-
-                // Make first character upper-case
-                lang_name[0] = toupper(lang_name[0]);
-
+                strcpy_s(lang_name, MenuText(LanguageFiles[i].c_str()));
                 pDefaultFont->DrawText(320 - pDefaultFont->StringLength(lang_name) / 2.0f,
                                        ypos + 120 + i * vertical_spacing, lang_name, 0x88FFFFFF);
                 if (AktuellerPunkt == i)
@@ -473,296 +564,70 @@ void MenuClass::ShowMenu() {
         } break;  // MENUZUSTAND_LANGUAGE
 
         case MENUZUSTAND_TASTEN: {
-            const int scale_factor = pDefaultFont->GetScaleFactor();
-            int off_x = xpos;
-            int off_y = ypos;
-            int col0_off_x = off_x + 30;
-            int col1_off_x = off_x + 40;
-            int col2_off_x = 230;
-            int title_off_y = off_y + OFFSET - 60;  // Configure Controls title line
-
-            int line_spacing = 16;         // Original line spacing for non-scaled fonts
-            int line1_off_y = off_y + 70;  // Top line of menu (Force Feedback line)
-
-            // Offsets for use with scaled-fonts on low-res devices:
-            if (scale_factor > 1) {
-                off_y = 5;
-                title_off_y = off_y + 10;
-                line_spacing = 24;  // Kinda tight using a scaled font, but it all needs to fit
-                col0_off_x = 270;
-                col1_off_x = col0_off_x + 10;
-                col2_off_x = 180;
-                line1_off_y = title_off_y;
-            }
-
-            int controls_off_y = line1_off_y + MENU_TASTEN_NUM_NON_CONTROLS * line_spacing;  // Controls lines Y-offset
-
-            // "CONFIGURE CONTROLS" title - Do not draw when using scaled fonts, as there's no room
-            if (scale_factor <= 1) {
-                pMenuFont->DrawTextCenterAlign(320, title_off_y, TextArray[TEXT::STEUERUNG], menucolor, 2);
-            }
-
-            // Überschrift "Spieler1" "Spieler2"
-            D3DCOLOR p1_col, p2_col;
-            if (AktuellerPunkt >= MENU_TASTEN_PLAYER_LINE) {
-                if (CurrentPlayer == 0) {
-                    p1_col = 0xFFFFFFFF;
-                    p2_col = 0x88FFFFFF;
-                    RenderRect(col1_off_x - 4, line1_off_y + MENU_TASTEN_PLAYER_LINE * line_spacing - 2,
-                               pDefaultFont->StringLength(TextArray[TEXT::PLAYER_ONE]) + 10, line_spacing, 0x30FFFFFF);
-                } else {
-                    p1_col = 0x88FFFFFF;
-                    p2_col = 0xFFFFFFFF;
-                    RenderRect(col1_off_x + col2_off_x - 4, line1_off_y + MENU_TASTEN_PLAYER_LINE * line_spacing - 2,
-                               pDefaultFont->StringLength(TextArray[TEXT::PLAYER_TWO]) + 10, line_spacing, 0x30FFFFFF);
-                }
-            } else {
-                p1_col = 0x88FFFFFF;
-                p2_col = 0x88FFFFFF;
-            }
-
-            pDefaultFont->DrawText(col1_off_x, line1_off_y + MENU_TASTEN_PLAYER_LINE * line_spacing,
-                                   TextArray[TEXT::PLAYER_ONE], p1_col);
-            pDefaultFont->DrawText(col1_off_x + col2_off_x, line1_off_y + MENU_TASTEN_PLAYER_LINE * line_spacing,
-                                   TextArray[TEXT::PLAYER_TWO], p2_col);
-
-            // Force-feedback checkbox:
-            {
-                D3DCOLOR col;
-                if (AktuellerPunkt == MENU_TASTEN_FORCEFEEDBACK_LINE)
-                    col = 0xFFFFFFFF;
-                else
-                    col = 0x88FFFFFF;
-
-                int bar_off_y = line1_off_y + MENU_TASTEN_FORCEFEEDBACK_LINE * line_spacing + 1;
-                int bar_dim = 8;
-                int border_w = 1;
-
-                if (scale_factor > 1) {
-                    bar_dim = 12;
-                    border_w = 2;
-                }
-
-                RenderRect(col0_off_x - border_w - bar_dim, bar_off_y, bar_dim, border_w, col);
-                RenderRect(col0_off_x - border_w - bar_dim, bar_off_y + bar_dim + border_w, bar_dim, border_w, col);
-                RenderRect(col0_off_x - border_w * 2 - bar_dim, bar_off_y, border_w, bar_dim + border_w * 2, col);
-                RenderRect(col0_off_x - border_w, bar_off_y, border_w, bar_dim + border_w * 2, col);
-
-                if (UseForceFeedback)
-                    RenderRect(col0_off_x - border_w - bar_dim, bar_off_y + border_w, bar_dim, bar_dim, col);
-
-                pDefaultFont->DrawText(col1_off_x, line1_off_y + MENU_TASTEN_FORCEFEEDBACK_LINE * line_spacing,
-                                       TextArray[TEXT::FORCEFEEDBACK], col);
-            }
-
-            // Defaults, type, mode, sensitivity lines
-            if (AktuellerPunkt == MENU_TASTEN_DEFAULTS_LINE)
-                pDefaultFont->DrawText(col1_off_x, line1_off_y + MENU_TASTEN_DEFAULTS_LINE * line_spacing,
-                                       TextArray[TEXT::DEFAULTS], 0xFFFFFFFF);
-            else
-                pDefaultFont->DrawText(col1_off_x, line1_off_y + MENU_TASTEN_DEFAULTS_LINE * line_spacing,
-                                       TextArray[TEXT::DEFAULTS], 0x88FFFFFF);
-
-            if (AktuellerPunkt == MENU_TASTEN_TYPE_LINE)
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_TYPE_LINE * line_spacing,
-                                                 TextArray[TEXT::TYP], 0xFFFFFFFF);
-            else
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_TYPE_LINE * line_spacing,
-                                                 TextArray[TEXT::TYP], 0x88FFFFFF);
-
-            if (AktuellerPunkt == MENU_TASTEN_MODE_LINE)
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_MODE_LINE * line_spacing,
-                                                 TextArray[TEXT::MODUS], 0xFFFFFFFF);
-            else
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_MODE_LINE * line_spacing,
-                                                 TextArray[TEXT::MODUS], 0x88FFFFFF);
-
-            if (AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE)
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_SENSITIVITY_LINE * line_spacing,
-                                                 TextArray[TEXT::EMPFINDLICHKEIT], 0xFFFFFFFF);
-            else
-                pDefaultFont->DrawTextRightAlign(col0_off_x, line1_off_y + MENU_TASTEN_SENSITIVITY_LINE * line_spacing,
-                                                 TextArray[TEXT::EMPFINDLICHKEIT], 0x88FFFFFF);
-
-            for (int i = 0; i < MENU_TASTEN_NUM_CONTROLS; i++) {
-                pDefaultFont->DrawTextRightAlign(col0_off_x, controls_off_y + i * line_spacing,
-                                                 TextArray[TEXT::TASTEN_L + i], 0x88FFFFFF);
-
-                if (AktuellerPunkt - MENU_TASTEN_NUM_NON_CONTROLS == i)
-                    pDefaultFont->DrawTextRightAlign(col0_off_x, controls_off_y + i * line_spacing,
-                                                     TextArray[TEXT::TASTEN_L + i], 0x88FFFFFF);
-            }
-
-            // Selection bar:
-            RenderRect(10, line1_off_y - 2 + AktuellerPunkt * line_spacing, 620, line_spacing, 0x24FFFFFF);
-
-            // Für beide Spieler den ganzen Klumbatsch anzeigen
-            for (int j = 0; j < 2; j++) {
-                PlayerClass *pCurrentPlayer = &Player[j];
-
-                // Typ (Tastatur, Joystick (mit Name)
-                D3DCOLOR col;
-                if (CurrentPlayer == j && AktuellerPunkt == MENU_TASTEN_TYPE_LINE)
-                    col = 0xFFFFFFFF;
-                else
-                    col = 0x88FFFFFF;
-
-                if (pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD)
-                    // Keyboard text
-                    pDefaultFont->DrawText(col1_off_x + j * col2_off_x,
-                                           line1_off_y + MENU_TASTEN_TYPE_LINE * line_spacing, TextArray[TEXT::KEYBOARD],
-                                           col);
-                else {
-                    // Print joystick name, truncated to fit if necessary
-                    std::string tmpbuf = std::to_string(pCurrentPlayer->JoystickIndex)
-                        .append(":")
-                        .append(DirectInput.Joysticks[pCurrentPlayer->JoystickIndex].JoystickName);
-                    int cutoff = tmpbuf.length() - 1;
-                    int const max_w = col2_off_x - 10;
-                    while (cutoff > 1 && pDefaultFont->StringLength(tmpbuf.c_str()) > max_w) {
-                        tmpbuf.erase(cutoff);
-                        cutoff--;
+            const int scale = pDefaultFont->GetScaleFactor();
+            const bool large = scale > 1;
+            const int line = large ? 24 : 14;
+            const int firstY = large ? 8 : 117;
+            constexpr int firstAction = MENU_TASTEN_NUM_NON_CONTROLS;
+            const int visible = large ? 13 : MENU_TASTEN_NUM_CONTROLS;
+            const int scroll = std::clamp(AktuellerPunkt - firstAction - visible + 1, 0, MENU_TASTEN_NUM_CONTROLS - visible);
+            const auto rowY = [&](int row) { return firstY + (row - (row >= firstAction ? scroll : 0)) * line; };
+            const auto rowColor = [&](int row) { return AktuellerPunkt == row ? 0xFFFFFFFF : 0xBBFFFFFF; };
+            const float left = std::max(viewLeft + 10.0f, -120.0f);
+            const float right = std::min(viewLeft + viewWidth - 10.0f, 760.0f);
+            const float width = right - left;
+            const float columns[] = {left + 0.28f * width, left + 0.64f * width, right};
+            constexpr const char *rumbleNames[] = {"OFF", "LOW", "MEDIUM", "HIGH"};
+            if (!large)
+                pMenuFont->DrawTextCenterAlign(320, 82, TextArray[TEXT::STEUERUNG], menucolor, 2);
+            RenderRect(left, rowY(AktuellerPunkt) - 1, width, line, 0x24FFFFFF);
+            RenderRect(columns[CurrentPlayer] - 3, rowY(AktuellerPunkt) - 1, columns[1] - columns[0] - 3, line, 0x5068A9EB);
+            for (int row = 0; row < MENU_TASTEN_NUM_LINES; ++row) {
+                if (row >= firstAction && (row < firstAction + scroll || row >= firstAction + scroll + visible))
+                    continue;
+                int action = ControlMenuAction(row);
+                const char *labels[] = {"Reset controls", "Player", TextArray[TEXT::TYP], "Rumble"};
+                const char *label = action >= 0 ? ControlActionName(action) : labels[row];
+                const auto fit = [&](const std::string &text, float x, float end, D3DCOLOR color) {
+                    MenuCell(pDefaultFont, text.c_str(), x, rowY(row), end-x-5, line, color, 0);
+                };
+                fit(MenuText(label), left + 2, columns[0], rowColor(row));
+                for (int p = 0; p < 2; ++p) {
+                    const auto &player = Player[p];
+                    const auto *pad = player.GetJoystick();
+                    const bool focused = p == CurrentPlayer && row == AktuellerPunkt;
+                    const uint32_t color = focused || (p == CurrentPlayer && row == MENU_TASTEN_PLAYER_LINE) ? 0xFFFFFFFF : 0xBBFFFFFF;
+                    if (action >= 0 && !(focused && control_reassignment_occuring)) {
+                        DrawControlBindings(player, pad, action, columns[p], rowY(row), columns[p + 1] - columns[p] - 6, line, color);
+                        continue;
                     }
-                    pDefaultFont->DrawText(col1_off_x + j * col2_off_x,
-                                           line1_off_y + MENU_TASTEN_TYPE_LINE * line_spacing, tmpbuf.c_str(), col);
-                }
-
-                // Rechteck für Empfindlichkeit
-                if (pCurrentPlayer->ControlType == CONTROLTYPE_JOY) {
-                    if (CurrentPlayer == j && AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE)
-                        col = 0xFFFFFFFF;
+                    std::string value;
+                    if (action >= 0)
+                        value = MenuText("Press input...");
+                    else if (row == MENU_TASTEN_PLAYER_LINE)
+                        value = TextArray[p == 0 ? TEXT::PLAYER_ONE : TEXT::PLAYER_TWO];
+                    else if (row == MENU_TASTEN_TYPE_LINE) {
+                        if (pad) value = std::to_string(player.JoystickIndex + 1) + ". " + pad->JoystickName;
+                        else if (player.ControlType == CONTROLTYPE_JOY) value = std::string(MenuText("Pad")) + " " + std::to_string(player.JoystickIndex + 1) + " (" + MenuText("disconnected") + ")";
+                        else value = TextArray[TEXT::KEYBOARD];
+                        if (player.ControlType == CONTROLTYPE_AUTO) value = std::string(MenuText("AUTO")) + ": " + value;
+                    } else if (row == MENU_TASTEN_RUMBLE_LINE)
+                        value = MenuText(rumbleNames[static_cast<int>(player.rumbleStrength)]);
                     else
-                        col = 0x88FFFFFF;
-
-                    int bar_off_y = line1_off_y + MENU_TASTEN_SENSITIVITY_LINE * line_spacing + 1;
-                    int bar_height = 8;
-                    int border_w = 1;
-
-                    if (scale_factor > 1) {
-                        bar_off_y += 2;
-                        bar_height = 12;
-                        border_w = 2;
-                    }
-
-                    RenderRect(col1_off_x + border_w + j * col2_off_x, bar_off_y, 100, border_w, col);
-                    RenderRect(col1_off_x + border_w + j * col2_off_x, bar_off_y + bar_height + border_w, 100, border_w,
-                               col);
-                    RenderRect(col1_off_x + j * col2_off_x, bar_off_y, border_w, bar_height + border_w * 2, col);
-                    RenderRect(col1_off_x + 100 + border_w + j * col2_off_x, bar_off_y, border_w,
-                               bar_height + border_w * 2, col);
-
-                    // Aktueller Balken
-                    RenderRect(col1_off_x + j * col2_off_x + border_w, bar_off_y + border_w,
-                               (1000.0f - (pCurrentPlayer->JoystickSchwelle + 100.0f)) / 8.0f, bar_height, col);
-
-                    // Modus
-                    if (CurrentPlayer == j && AktuellerPunkt == MENU_TASTEN_MODE_LINE)
-                        col = 0xFFFFFFFF;
-                    else
-                        col = 0x88FFFFFF;
-
-                    if (pCurrentPlayer->JoystickMode == JOYMODE_JOYSTICK)
-                        pDefaultFont->DrawText(col1_off_x + j * col2_off_x,
-                                               line1_off_y + MENU_TASTEN_MODE_LINE * line_spacing,
-                                               TextArray[TEXT::JOYMODE_STICK], col);
-                    else
-                        pDefaultFont->DrawText(col1_off_x + j * col2_off_x,
-                                               line1_off_y + MENU_TASTEN_MODE_LINE * line_spacing,
-                                               TextArray[TEXT::JOYMODE_PAD], col);
-                }
-
-                for (int i = 0; i < MENU_TASTEN_NUM_CONTROLS; i++) {
-                    bool on_move_line = (i == AKTION_LINKS || i == AKTION_RECHTS || i == AKTION_DUCKEN);
-                    bool on_look_line = (i == AKTION_OBEN || i == AKTION_UNTEN);
-                    bool on_jump_line = (i == AKTION_JUMP);
-                    D3DCOLOR col2;
-                    if (AktuellerPunkt - MENU_TASTEN_NUM_NON_CONTROLS == i && CurrentPlayer == j)
-                        col2 = 0xFFFFFFFF;
-                    else
-                        col2 = 0x88FFFFFF;
-
-                    if (CurrentPlayer != j || AktuellerPunkt - MENU_TASTEN_NUM_NON_CONTROLS != i ||
-                        (AktuellerPunkt - MENU_TASTEN_NUM_NON_CONTROLS == i && !control_reassignment_occuring)) {
-                        // Nicht definiert?
-                        if ((pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD &&
-                             pCurrentPlayer->AktionKeyboard[i] == -1) ||
-                            (pCurrentPlayer->ControlType == CONTROLTYPE_JOY &&
-                             (!on_move_line && !on_look_line &&
-                              !(on_jump_line && pCurrentPlayer->JoystickMode == JOYMODE_JOYSTICK)) &&
-                             pCurrentPlayer->AktionJoystick[i] == -1)) {
-                            // Action is not defined
-                            pDefaultFont->DrawText(col1_off_x + j * col2_off_x, controls_off_y + i * line_spacing,
-                                                   TextArray[TEXT::NICHT_DEFINIERT], col2);
-                        } else {
-                            if (pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD) {
-                                // Keyboard key
-                                if (pCurrentPlayer->AktionKeyboard[i] != -1)
-                                    pDefaultFont->DrawText(col1_off_x + j * col2_off_x,
-                                                           controls_off_y + i * line_spacing,
-                                                           GetKeyName(pCurrentPlayer->AktionKeyboard[i]), col2);
-                            } else {
-                                // Joy axis/hat/button
-                                std::string Buf;
-                                if (on_move_line) {
-                                    // The three movement assignments (Walk Left, Walk Right, Crouch) can only be
-                                    //  assigned to DPAD or X/Y-analog-axis and are a special case:
-                                    if (pCurrentPlayer->Walk_UseAxxis) {
-                                        // Movement is assigned to analog stick
-                                        Buf = TextArray[TEXT::JOY_ACHSE];
-                                    } else {
-                                        // Movement is assigned to D-PAD HAT
-                                        Buf = TextArray[TEXT::JOY_COOLIE];
-                                    }
-                                } else if (on_look_line) {
-                                    // Similarly, the two look assignments can only be assigned to DPAD or
-                                    // X/Y-analog-axis
-                                    if (pCurrentPlayer->Look_UseAxxis) {
-                                        // Look up/down is assigned to analog stick
-                                        Buf = TextArray[TEXT::JOY_ACHSE];
-                                    } else {
-                                        // Look up/down is assigned to DPAD HAT
-                                        Buf = TextArray[TEXT::JOY_COOLIE];
-                                    }
-                                } else if (on_jump_line && pCurrentPlayer->JoystickMode == JOYMODE_JOYSTICK) {
-                                    // When in joystick mode, jump is handled by movement (DPAD or analog axis)
-                                    if (pCurrentPlayer->Walk_UseAxxis) {
-                                        // Jump/Movement is assigned to analog stick
-                                        Buf = TextArray[TEXT::JOY_ACHSE];
-                                    } else {
-                                        // Jump/Movement is assigned to DPAD HAT
-                                        Buf = TextArray[TEXT::JOY_COOLIE];
-                                    }
-                                } else {
-                                    // Joy button
-                                    Buf.append(TextArray[TEXT::BUTTON]).append(" ").append(
-                                              DirectInput.MapButtonToString(pCurrentPlayer->JoystickIndex,
-                                                                            pCurrentPlayer->AktionJoystick[i]));
-                                }
-
-                                pDefaultFont->DrawText(col1_off_x + j * col2_off_x, controls_off_y + i * line_spacing,
-                                                       Buf.c_str(), col2);
-                            }
-                        }
-                    } else {
-                        std::string Buf;
-                        // Redefinition prompt
-                        if (scale_factor <= 1) {
-                            if (pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD)
-                                // Ask for new key
-                                Buf=TextArray[TEXT::TASTEN_NEU_T];
-                            else
-                                // Ask for new button
-                                Buf=TextArray[TEXT::TASTEN_NEU_B];
-                        } else {
-                            // When using scaled fonts (low-res device), there's not enough room for the text prompt
-                            Buf="???";
-                        }
-
-                        pDefaultFont->DrawText(col1_off_x + j * col2_off_x, controls_off_y + i * line_spacing,
-                                               Buf.c_str(), col2);
-                    }
+                        value = MenuText("Reset");
+                    fit(value, columns[p], columns[p + 1], color);
                 }
             }
+            const auto &player = Player[CurrentPlayer];
+            const auto *pad = player.GetJoystick();
+            std::string hint = MenuText(control_reassignment_occuring ?
+                (bindingNotice ? bindingNotice : "cancel binding") : "binding help");
+            ReplaceAll(hint, "{nav}", MenuText(pad ? "pad sides" : "key sides"));
+            ReplaceAll(hint, "{ok}", MenuPrompt(pad, MenuPadButton::Select, DIK_RETURN));
+            ReplaceAll(hint, "{del}", MenuPrompt(pad, MenuPadButton::Remove, DIK_DELETE));
+            ReplaceAll(hint, "{back}", MenuPrompt(pad, MenuPadButton::Pause, DIK_ESCAPE));
+            MenuCell(pDefaultFont, hint.c_str(), left, large ? 429 : 440, width, line, 0xDDFFFFFF, 0, 0.5f);
+            pDefaultFont->SetScaleFactor(scale);
         } break;  // MENUZUSTAND_TASTEN
 
         case MENUPUNKT_HIGHSCORES: {
@@ -782,7 +647,7 @@ void MenuClass::ShowMenu() {
                 //_itoa_s(i+1, Buffer, 10);
                 // pMenuFont->DrawText(xpos-90, ypos+static_cast<float>(105+i*26), Buffer, Color, 2);
 
-                pMenuFont->DrawText(xpos - 120, ypos + static_cast<float>(105 + i * 26), Highscores[i].Name, Color, 2);
+                pMenuFont->DrawText(xpos - 120, ypos + static_cast<float>(105 + i * 26), (strcmp(Highscores[i].Name, "!!! CHEATER !!!") == 0 ? MenuText("!!! CHEATER !!!") : Highscores[i].Name), Color, 2);
 
                 std::string strbuf = std::to_string(Highscores[i].Score);
                 pMenuFont->DrawTextRightAlign(xpos + 270, ypos + static_cast<float>(105 + i * 26), strbuf.c_str(), Color, 2);
@@ -826,15 +691,10 @@ void MenuClass::ShowMenu() {
             float const scale_factor = pDefaultFont->GetScaleFactor();
             int const num_lines = 40 / pDefaultFont->GetScaleFactor();
             int const yoff_inc = 12 * pDefaultFont->GetScaleFactor();
-            const char **credits_displayed = Credits;
-
-            if (CommandLineParams.LowRes) {
-                credits_displayed = LowResCredits;  // Use the low-res text instead
-            }
-
-            int i;
-            for (i = 0; i < num_lines; i++) {
-
+            const auto &lines = CreditLines(viewWidth - 32);
+            for (int i = 0; i < num_lines; ++i) {
+                const int row = CreditsOffset + i - num_lines;
+                if (row < 0 || row >= static_cast<int>(lines.size())) continue;
                 int alpha2 = i * yoff_inc - static_cast<int>(CreditsPosition);
 
                 if (alpha2 > 360) {
@@ -856,7 +716,7 @@ void MenuClass::ShowMenu() {
 
                 pDefaultFont->DrawTextCenterAlign(320.0f,
                                                   static_cast<float>(i * yoff_inc - static_cast<int>(CreditsPosition)),
-                                                  credits_displayed[CreditsOffset + i], Color, 0);
+                                                  lines[row].c_str(), Color, 0);
             }
 
             // Credits scrollen
@@ -884,23 +744,21 @@ void MenuClass::ShowMenu() {
                     // Credits zuende ?
                     // Dann von vorne beginnen
                     //
-                    if (strcmp("#eoc", credits_displayed[CreditsOffset + i]) == 0)
+                    if (CreditsOffset >= num_lines + static_cast<int>(lines.size()))
                         CreditsOffset = 0;
                 }
             }
         } break;  // CREDITS
 
-        case MENUZUSTAND_NEWGAME: {
-            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET, TextArray[TEXT::MENUE_SPIEL_STARTEN], menucolor, 2);
-
-            for (int i = 0; i < 3; i++)
-                if (AktuellerPunkt != i)
-                    pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + (i + 2) * 35,
-                                                   TextArray[TEXT::MENUE_TUTORIAL_SPIELEN + i], menucolor2, 2);
-
-            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + (AktuellerPunkt + 2) * 35,
-                                           TextArray[TEXT::MENUE_TUTORIAL_SPIELEN + AktuellerPunkt], menucolor, 2);
-
+        case MENUZUSTAND_TUTORIAL: {
+            std::string question(TextArray[TEXT::MENUE_TUTORIAL_SPIELEN]);
+            question.erase(question.find_last_not_of(" \r\n?") + 1);
+            question += '?';
+            const char *yes = MenuText("YES"), *no = MenuText("NO");
+            pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET, question.c_str(), menucolor, 2);
+            for (int i = 0; i < 2; ++i)
+                pMenuFont->DrawTextCenterAlign(320, ypos + OFFSET + (i + 2) * 35, i == 0 ? yes : no,
+                                                i == AktuellerPunkt ? menucolor : menucolor2, 2);
         } break;
 
         case MENUZUSTAND_PLAYERCOUNT: {
@@ -1008,7 +866,6 @@ void MenuClass::DoMenu() {
     bool joy_right = false;
     bool joy_enter = false;
     bool joy_escape = false;
-    bool joy_delete = false;
     //    int joy_idx = Player[0].JoystickIndex;
     static float input_counter = 0.0f;
     constexpr float INPUT_DELAY = 40.0f;  // Only accept joy input once every time counter reaches this value
@@ -1059,71 +916,53 @@ void MenuClass::DoMenu() {
     //----- Tasten abfragen
 
     bool selected = false;
-    bool anybutton = false;
 
-    DirectInput.UpdateJoysticks();
+    const bool musicSelected = AktuellerZustand == MENUZUSTAND_VOLUMES && AktuellerPunkt == MENUPUNKT_VOLUMES_MUSIC;
+    if (!musicSelected)
+        musicAdjustmentDirection = 0;
 
-    if (DirectInput.AnyButtonDown())
-        anybutton = true;
-
-    if (input_counter >= INPUT_DELAY && JoystickFound == true) {
-        // Normally, for menu input we only check Player 1's joystick.
-        int num_joys_to_check = 1;
-        int joy_idx = Player[0].JoystickIndex;
-        if (joy_idx < 0 || joy_idx >= DirectInput.JoysticksFound) {
-            joy_idx = 0;
+    bool menuControllersReleased = true;
+    int navigationSlot = -1;
+    for (int slot = DirectInput.NextJoystick(-1); slot >= 0; slot = DirectInput.NextJoystick(slot)) {
+        const auto &joystick = DirectInput.Joysticks[slot];
+        bool right = false, left = false, down = false, up = false;
+        const int pov = joystick.JoystickPOV;
+        if (pov != -1) {
+            right = pov >= 4500 && pov <= 13500;
+            left  = pov >= 22500 && pov <= 31500;
+            down  = pov == 18000;
+            up    = pov == 0;
         }
-#if defined(GCW)
-        // However, on GCW Zero the internal controls are their own joystick
-        // and we must always be sure to check them.
-        if (Player[0].JoystickIndex != DirectInput.GetInternalJoystickIndex()) {
-            num_joys_to_check++;
+#if !defined(GCW)
+        else if (std::abs(joystick.JoystickX) > JoystickDeadzone &&
+                 std::abs(joystick.JoystickX) >= std::abs(joystick.JoystickY)) {
+            right = joystick.JoystickX > 0;
+            left  = joystick.JoystickX < 0;
+        } else if (std::abs(joystick.JoystickY) > JoystickDeadzone) {
+            down = joystick.JoystickY > 0;
+            up   = joystick.JoystickY < 0;
         }
-#endif  // GCW
+#endif
+        const bool enter = joystick.ButtonEnterPressed();
+        const bool escape = joystick.ButtonEscapePressed();
+        const bool erase = joystick.ButtonDeletePressed();
+        if (joystick.ButtonStartPressed())
+            menuControllersReleased = false;
+        if (!(right || left || down || up || enter || escape || erase))
+            continue;
 
-        for (int joy_ctr = 0; joy_ctr < num_joys_to_check; joy_ctr++) {
-#if defined(GCW)
-            if (joy_ctr > 0) {
-                // After first checking Player 1, check the internal GCW Zero controls:
-                joy_idx = DirectInput.GetInternalJoystickIndex();
-            }
-#endif  // GCW
-
-            if (DirectInput.Joysticks[joy_idx].JoystickPOV != -1) {
-                // HAT switch is pressed
-                if (DirectInput.Joysticks[joy_idx].JoystickPOV >= 4500 * 1 &&
-                    DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 3) {
-                    joy_right = true;
-                } else if (DirectInput.Joysticks[joy_idx].JoystickPOV >= 4500 * 5 &&
-                           DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 7) {
-                    joy_left = true;
-                } else if (DirectInput.Joysticks[joy_idx].JoystickPOV > 4500 * 3 &&
-                           DirectInput.Joysticks[joy_idx].JoystickPOV < 4500 * 5) {
-                    joy_down = true;
-                } else if ((DirectInput.Joysticks[joy_idx].JoystickPOV > 4500 * 7 &&
-                            DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 8) ||
-                           (DirectInput.Joysticks[joy_idx].JoystickPOV >= 0 &&
-                            DirectInput.Joysticks[joy_idx].JoystickPOV < 4500 * 1)) {
-                    joy_up = true;
-                }
-            } else {
-#if !defined(GCW)  // On GCW Zero, only accept directional input for the menu from the DPAD
-                if (DirectInput.Joysticks[joy_idx].JoystickX > Player[0].JoystickSchwelle) {
-                    joy_right = true;
-                } else if (DirectInput.Joysticks[joy_idx].JoystickX < -Player[0].JoystickSchwelle) {
-                    joy_left = true;
-                } else if (DirectInput.Joysticks[joy_idx].JoystickY > Player[0].JoystickSchwelle) {
-                    joy_down = true;
-                } else if (DirectInput.Joysticks[joy_idx].JoystickY < -Player[0].JoystickSchwelle) {
-                    joy_up = true;
-                }
-#endif  // GCW
-            }
-
-            joy_enter = joy_enter || DirectInput.Joysticks[joy_idx].ButtonEnterPressed();
-            joy_escape = joy_escape || DirectInput.Joysticks[joy_idx].ButtonEscapePressed();
-            joy_delete = joy_delete || DirectInput.Joysticks[joy_idx].ButtonDeletePressed();
-        }
+        menuControllersReleased = false;
+        if (navigationSlot >= 0 || control_reassignment_occuring ||
+            (input_counter < INPUT_DELAY && !(musicSelected && (left || right))))
+            continue;
+        navigationSlot = slot;
+        lastMenuJoystick = slot;
+        joy_right = right;
+        joy_left = left;
+        joy_down = down;
+        joy_up = up;
+        joy_enter = enter;
+        joy_escape = escape;
     }
 
     if ((KeyDown(DIK_SPACE) || KeyDown(DIK_RETURN) || joy_enter) && AuswahlPossible && !control_reassignment_occuring) {
@@ -1132,36 +971,26 @@ void MenuClass::DoMenu() {
     }
 
     bool KeyOK = false;
-    bool JoyOK = false;
 
     if (!KeyDown(DIK_NUMPAD4) && !KeyDown(DIK_NUMPAD6) && !KeyDown(DIK_NUMPAD2) && !KeyDown(DIK_NUMPAD8) &&
         !KeyDown(DIK_LEFT) && !KeyDown(DIK_RIGHT) && !KeyDown(DIK_UP) && !KeyDown(DIK_DOWN) && !KeyDown(DIK_RETURN) &&
-        !KeyDown(DIK_SPACE) && !KeyDown(DIK_ESCAPE)) {
+        !KeyDown(DIK_SPACE) && !KeyDown(DIK_ESCAPE) &&
+        (AktuellerZustand != MENUZUSTAND_TASTEN || (!KeyDown(DIK_DELETE) && !KeyDown(DIK_BACK)))) {
         KeyOK = true;
         if (CommandLineParams.Arcade) {
             for (int i = 0; i < 2; i++) {
                 if (Player[i].ControlType != CONTROLTYPE_KEYBOARD)
                     continue;
-                if (KeyDown(Player[i].AktionKeyboard[AKTION_RECHTS]) || KeyDown(Player[i].AktionKeyboard[AKTION_LINKS]) ||
-                    KeyDown(Player[i].AktionKeyboard[AKTION_OBEN]) || KeyDown(Player[i].AktionKeyboard[AKTION_DUCKEN]) ||
-                    KeyDown(Player[i].AktionKeyboard[AKTION_SHOOT]) || KeyDown(Player[i].AktionKeyboard[AKTION_WAFFEN_CYCLE]))
+                if (Player[i].ActionPressed(AKTION_RECHTS, nullptr) || Player[i].ActionPressed(AKTION_LINKS, nullptr) ||
+                    Player[i].ActionPressed(AKTION_OBEN, nullptr) || Player[i].ActionPressed(AKTION_DUCKEN, nullptr) ||
+                    Player[i].ActionPressed(AKTION_SHOOT, nullptr) || Player[i].ActionPressed(AKTION_WAFFEN_CYCLE, nullptr))
                     KeyOK = false;
             }
         }
     }
 
-    // DKS - TODO: Figure out if we can get rid of JoyOK, it was here originally and I don't like or want it
-    if (JoystickFound == false)
-        JoyOK = true;
-    else {
-        if (anybutton == false &&
-            DirectInput.Joysticks[Player[0].JoystickIndex].JoystickY > -Player[0].JoystickSchwelle &&
-            DirectInput.Joysticks[Player[0].JoystickIndex].JoystickY < Player[0].JoystickSchwelle &&
-            DirectInput.Joysticks[Player[0].JoystickIndex].JoystickPOV == -1)
-            JoyOK = true;
-    }
-
-    if (KeyOK == true && JoyOK == true)
+    if (!KeyOK && navigationSlot < 0) lastMenuJoystick = -2;
+    if (KeyOK && menuControllersReleased && !control_reassignment_occuring)
         AuswahlPossible = true;
 
     if ((ShowLanguageInfoCounter > 256.0f && ShowLanguageInfoCounter < 1600.0f) &&
@@ -1192,22 +1021,7 @@ void MenuClass::DoMenu() {
             AktuellerPunkt = 0;
         }
 
-        // Checken, ob bei der Tastenwahl ein leeres Feld übersprungen werden muss
-        //
         if (AktuellerZustand == MENUZUSTAND_TASTEN) {
-            PlayerClass *pCurrentPlayer;
-
-            if (CurrentPlayer == 0)
-                pCurrentPlayer = &Player[0];
-            else
-                pCurrentPlayer = &Player[1];
-
-            // DKS - Altered to match redesigned controls submenu:
-            if ((AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE || AktuellerPunkt == MENU_TASTEN_MODE_LINE) &&
-                pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD) {
-                AktuellerPunkt = MENU_TASTEN_TYPE_LINE;
-            }
-
             if (AktuellerPunkt < 0)
                 AktuellerPunkt = MENU_TASTEN_NUM_LINES - 1;
         }
@@ -1225,22 +1039,7 @@ void MenuClass::DoMenu() {
             AktuellerPunkt = 2;
         }
 
-        // Checken, ob bei der Tastenwahl ein leeres Feld übersprungen werden muss
-        //
         if (AktuellerZustand == MENUZUSTAND_TASTEN) {
-            PlayerClass *pCurrentPlayer;
-
-            if (CurrentPlayer == 0)
-                pCurrentPlayer = &Player[0];
-            else
-                pCurrentPlayer = &Player[1];
-
-            // DKS - Altered to match redesigned controls submenu:
-            if ((AktuellerPunkt == MENU_TASTEN_MODE_LINE || AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE) &&
-                pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD) {
-                AktuellerPunkt = MENU_TASTEN_NUM_NON_CONTROLS;
-            }
-
             if (AktuellerPunkt >= MENU_TASTEN_NUM_LINES)
                 AktuellerPunkt = 0;
         }
@@ -1250,7 +1049,7 @@ void MenuClass::DoMenu() {
         for (int i = 0; i < 2; i++) {
             if (Player[i].ControlType != CONTROLTYPE_KEYBOARD)
                 continue;
-            if (KeyDown(Player[i].AktionKeyboard[AKTION_WAFFEN_CYCLE]))
+            if (Player[i].ActionPressed(AKTION_WAFFEN_CYCLE, nullptr))
                 joy_escape = true;
         }
     }
@@ -1279,60 +1078,44 @@ void MenuClass::DoMenu() {
             // Menu-Punkt im Hauptmenu ausgewählt ?
             if (selected) {
                 AuswahlPossible = false;
-
-                // Je nach aktuellem Menupunkt in das entsprechende Untermenu wechseln
-                if (AktuellerPunkt == MENUPUNKT_STARTGAME) {
-                    AktuellerZustand = MENUZUSTAND_NEWGAME;
-                    AktuellerPunkt = 1;
-                } else if (AktuellerPunkt == MENUPUNKT_CONTINUEGAME && Stage > -1) {
-                    AktuellerPunkt = 0;
-                    SoundManager.StopSong(MUSIC::MENU, false);
-                    SpielZustand = GameStateEnum::GAMELOOP;
-
-                    // DKS - We now use the sound manager's already-present pause functions here:
-#if 0
-                if (MUSIC::GetPaused(SoundManager.its_Songs[MUSIC::BOSS]->SongData))
-                    SoundManager.PlaySong(MUSIC::BOSS, true);
-                else if (Player[0].PunisherActive == true) {
-                    SoundManager.PlaySong(MUSIC::PUNISHER, true);
+                switch (AktuellerPunkt) {
+                    case MENUPUNKT_STARTGAME:
+                        AktuellerZustand = MENUZUSTAND_STARTGAME;
+                        AktuellerPunkt = 0;
+                        break;
+                    case MENUPUNKT_CONTINUEGAME:
+                        if (Stage > -1) {
+                            AktuellerPunkt = 0;
+                            SoundManager.StopSong(MUSIC::MENU, false);
+                            SpielZustand = GameStateEnum::GAMELOOP;
+                            SoundManager.UnpauseSongs();
+                            SoundManager.UnpauseSounds();
+                            Player[0].PowerLinePossible = false;
+                            Player[0].ShotDelay = 2.0f;
+                        }
+                        break;
+                    case MENUPUNKT_VOLUMES:
+                        AktuellerZustand = MENUZUSTAND_VOLUMES;
+                        AktuellerPunkt = 0;
+                        break;
+                    case MENUPUNKT_HIGHSCORES:
+                        SoundManager.SetSongVolume(MUSIC::HIGHSCORE, 0);
+                        SoundManager.FadeSong(MUSIC::MENU, -5.0f, 0, false);
+                        SoundManager.FadeSong(MUSIC::HIGHSCORE, 5.0f, 100, false);
+                        AktuellerZustand = MENUPUNKT_HIGHSCORES;
+                        AktuellerPunkt = MENUZUSTAND_ENTERNAME;
+                        break;
+                    case MENUPUNKT_CREDITS:
+                        SoundManager.StopSong(MUSIC::MENU, false);
+                        SoundManager.PlaySong(MUSIC::CREDITS, false);
+                        SoundManager.SetSongVolume(MUSIC::CREDITS, 100);
+                        CreditsCounter = 0.0f;
+                        AktuellerZustand = MENUPUNKT_CREDITS;
+                        break;
+                    case MENUPUNKT_END:
+                        GameRunning = false;
+                        break;
                 }
-                else if (Player[0].Riding()) {
-                    SoundManager.PlaySong(MUSIC::FLUGSACK, true);
-                }
-                else
-                    SoundManager.PlaySong(MUSIC::STAGEMUSIC, true);
-#endif  // 0
-                    SoundManager.UnpauseSongs();
-                    SoundManager.UnpauseSounds();
-
-                    Player[0].PowerLinePossible = false;
-                    Player[0].ShotDelay = 2.0f;
-                } else if (AktuellerPunkt == MENUPUNKT_CREDITS) {
-                    SoundManager.StopSong(MUSIC::MENU, false);
-                    // DKS
-                    // SoundManager.its_Songs[MUSIC::CREDITS]->FadingVolume = 0.0f;
-                    SoundManager.PlaySong(MUSIC::CREDITS, false);
-                    SoundManager.SetSongVolume(MUSIC::CREDITS, 100);
-                    CreditsCounter = 0.0f;
-                } else if (AktuellerPunkt == MENUPUNKT_HIGHSCORES) {
-                    SoundManager.SetSongVolume(MUSIC::HIGHSCORE, 0);
-                    SoundManager.FadeSong(MUSIC::MENU, -5.0f, 0, false);
-                    SoundManager.FadeSong(MUSIC::HIGHSCORE, 5.0f, 100, false);
-                }
-
-                if (AktuellerPunkt != MENUPUNKT_CONTINUEGAME && AktuellerPunkt != MENUPUNKT_STARTGAME)
-                    AktuellerZustand = AktuellerPunkt;
-
-                if (AktuellerPunkt == MENUPUNKT_END)
-                    GameRunning = false;
-
-                if (AktuellerPunkt != MENUPUNKT_CONTINUEGAME && AktuellerPunkt != MENUPUNKT_HIGHSCORES &&
-                    AktuellerPunkt != MENUPUNKT_CREDITS && AktuellerPunkt != MENUPUNKT_END)
-                    AktuellerPunkt = 0;
-
-                if (AktuellerPunkt == MENUPUNKT_HIGHSCORES)
-                    AktuellerPunkt = MENUZUSTAND_ENTERNAME;
-
                 SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
 
                 // Highscore wieder von Anfang an blinken lassen
@@ -1346,54 +1129,29 @@ void MenuClass::DoMenu() {
 
         // Sound / Musik Lautstärke wählen
         case MENUZUSTAND_VOLUMES: {
+            const int last = DirectGraphics.SupportsDisplayMenu() ? MENUPUNKT_VOLUMES_DISPLAY : MENUPUNKT_VOLUMES_DETAILS;
             if (AktuellerPunkt < 0)
-                AktuellerPunkt = 4;
-
-            if (AktuellerPunkt > 4)
+                AktuellerPunkt = last;
+            if (AktuellerPunkt > last)
                 AktuellerPunkt = 0;
 
-            // Volumes geändert ?
-            // Leiser
-            bool pressed = false;
-
-            if (AktuellerPunkt <= 1) {
-                if (KeyDown(DIK_NUMPAD4) || KeyDown(DIK_LEFT) || joy_left) {
-                    pressed = true;
-                } else {
-                    pressed = false;
-                }
-            }
-
-            if (pressed) {
-                if (AktuellerPunkt == 0) {
-                    SoundManager.g_sound_vol -= Timer.sync(5.0f);
-                    if (SoundManager.g_sound_vol < 0.0f)
-                        SoundManager.g_sound_vol = 0.0f;
-                }
-
-                if (AktuellerPunkt == 1) {
-                    SoundManager.g_music_vol -= Timer.sync(5.0f);
-                    if (SoundManager.g_music_vol < 0.0f)
-                        SoundManager.g_music_vol = 0.0f;
-                }
-            }
-
-            // Lauter
-            if (KeyDown(DIK_NUMPAD6) || KeyDown(DIK_RIGHT) || joy_right)
-                pressed = true;
-            else
-                pressed = false;
-
-            if (pressed) {
-                if (AktuellerPunkt == 0) {
-                    SoundManager.g_sound_vol += Timer.sync(5.0f);
-                    if (SoundManager.g_sound_vol > 100.0f)
-                        SoundManager.g_sound_vol = 100.0f;
-                }
-                if (AktuellerPunkt == 1) {
-                    SoundManager.g_music_vol += Timer.sync(5.0f);
-                    if (SoundManager.g_music_vol > 100.0f)
-                        SoundManager.g_music_vol = 100.0f;
+            if (AktuellerPunkt == MENUPUNKT_VOLUMES_SOUND || AktuellerPunkt == MENUPUNKT_VOLUMES_MUSIC) {
+                const bool lower = KeyDown(DIK_NUMPAD4) || KeyDown(DIK_LEFT) || joy_left;
+                const bool raise = KeyDown(DIK_NUMPAD6) || KeyDown(DIK_RIGHT) || joy_right;
+                if (AktuellerPunkt == MENUPUNKT_VOLUMES_MUSIC) {
+                    const int direction = static_cast<int>(raise) - static_cast<int>(lower);
+                    const Uint32 now = SDL_GetTicks();
+                    if (direction != 0 && (direction != musicAdjustmentDirection || now - musicAdjustmentTime >= 150)) {
+                        constexpr float step = 5.0f;
+                        const float position = SoundManager.g_music_vol / step;
+                        const float index = direction > 0 ? std::floor(position) : std::ceil(position);
+                        SoundManager.SetVolumes(SoundManager.g_sound_vol, (index + direction) * step);
+                        musicAdjustmentTime = now;
+                    }
+                    musicAdjustmentDirection = direction;
+                } else if (lower != raise) {
+                    const float change = Timer.sync(lower ? -5.0f : 5.0f);
+                    SoundManager.SetVolumes(SoundManager.g_sound_vol + change, SoundManager.g_music_vol);
                 }
             }
 
@@ -1432,7 +1190,12 @@ void MenuClass::DoMenu() {
 
                 // Sprache wählen
                 //
-                if (AktuellerPunkt == 4) {
+                if (AktuellerPunkt == MENUPUNKT_VOLUMES_DISPLAY) {
+                    pendingDisplay = DirectGraphics.GetDisplaySettings();
+                    displayStatus = nullptr;
+                    AktuellerZustand = MENUZUSTAND_DISPLAY;
+                    AktuellerPunkt = DISPLAY_MODE;
+                } else if (AktuellerPunkt == MENUPUNKT_VOLUMES_DETAILS) {
                     options_Detail++;
 
                     if (options_Detail > DETAIL_MAXIMUM)
@@ -1452,6 +1215,98 @@ void MenuClass::DoMenu() {
                 SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
             }
         } break;  // Sound / Musik Lautstärke
+
+        case MENUZUSTAND_DISPLAY: {
+            constexpr int rowCount = DISPLAY_LAST + 1;
+            AktuellerPunkt = (AktuellerPunkt + rowCount) % rowCount;
+
+            if ((KeyDown(DIK_ESCAPE) || joy_escape) && AuswahlPossible) {
+                input_counter = 0.0f;
+                AuswahlPossible = false;
+                AktuellerZustand = MENUZUSTAND_VOLUMES;
+                AktuellerPunkt = MENUPUNKT_VOLUMES_DISPLAY;
+                SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
+                break;
+            }
+
+            const bool left = KeyDown(DIK_NUMPAD4) || KeyDown(DIK_LEFT) || joy_left;
+            const bool right = KeyDown(DIK_NUMPAD6) || KeyDown(DIK_RIGHT) || joy_right;
+            if (!selected && !(AuswahlPossible && (left || right)))
+                break;
+            if (AktuellerPunkt == DISPLAY_APPLY && !selected)
+                break;
+
+            input_counter = 0.0f;
+            AuswahlPossible = false;
+            displayStatus = nullptr;
+            const int step = left ? -1 : 1;
+            switch (AktuellerPunkt) {
+                case DISPLAY_MODE:
+                    pendingDisplay.fullscreen = !pendingDisplay.fullscreen;
+                    pendingDisplay.width = pendingDisplay.height = 0;
+                    break;
+                case DISPLAY_ASPECT: {
+                    const int count = static_cast<int>(DisplayAspect::Count);
+                    const int current = static_cast<int>(pendingDisplay.aspect);
+                    pendingDisplay.aspect = static_cast<DisplayAspect>((current + step + count) % count);
+                    break;
+                }
+                case DISPLAY_RESOLUTION: {
+                    const auto modes = DirectGraphics.DisplayResolutions(pendingDisplay.fullscreen);
+                    const auto current = std::find_if(modes.begin(), modes.end(), [this](const auto &mode) {
+                        return mode.width == pendingDisplay.width && mode.height == pendingDisplay.height;
+                    });
+                    const int count = static_cast<int>(modes.size());
+                    const int index = current == modes.end() ? 0 : static_cast<int>(current - modes.begin());
+                    const auto &next = modes[(index + step + count) % count];
+                    pendingDisplay.width = next.width;
+                    pendingDisplay.height = next.height;
+                    break;
+                }
+                case DISPLAY_VSYNC:
+                    pendingDisplay.vsync = !pendingDisplay.vsync;
+                    break;
+                case DISPLAY_TEXTURE_FILTERING:
+                    pendingDisplay.textureFiltering = !pendingDisplay.textureFiltering;
+                    break;
+                case DISPLAY_CRT_FILTER:
+                    if (DirectGraphics.SupportsCrtFilter())
+                        pendingDisplay.crt = !pendingDisplay.crt;
+                    break;
+                case DISPLAY_BRIGHTNESS:
+                    pendingDisplay.brightnessLevel = std::clamp(pendingDisplay.brightnessLevel + step, 0,
+                        static_cast<int>(DisplaySettings::brightnessGains.size()) - 1);
+                    break;
+                case DISPLAY_SPLITSCREEN_TYPE:
+                    pendingDisplay.splitScreenType = pendingDisplay.splitScreenType == SplitScreenType::Dynamic
+                        ? SplitScreenType::OneScreen : SplitScreenType::Dynamic;
+                    break;
+                case DISPLAY_APPLY: {
+                    const bool typeChanged = pendingDisplay.splitScreenType != DirectGraphics.GetDisplaySettings().splitScreenType;
+                    displayStatusStarted = SDL_GetTicks();
+                    showVsyncWarning = false;
+                    if (!DirectGraphics.ApplyDisplaySettings(pendingDisplay)) {
+                        pendingDisplay = DirectGraphics.GetDisplaySettings();
+                        displayStatus = "Display mode unavailable";
+                    } else if (!SaveDisplaySettings(pendingDisplay)) {
+                        displayStatus = "Applied. Could not save settings.";
+                    } else {
+                        const bool deferred = Stage >= 0
+                            ? pendingDisplay.splitScreenType != TileEngine.LevelSplitScreenType() : typeChanged;
+                        const bool vsyncUnavailable = DirectGraphics.IsVSyncEnabled() != pendingDisplay.vsync;
+                        displayStatus = "Display settings saved";
+                        if (deferred) {
+                            displayStatus = "Some settings apply on level load or restart.";
+                            showVsyncWarning = vsyncUnavailable;
+                        } else if (vsyncUnavailable) {
+                            displayStatus = "Saved. VSync unavailable on this driver.";
+                        }
+                    }
+                    break;
+                }
+            }
+            SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
+        } break;
 
         case MENUZUSTAND_LANGUAGE: {
             const int num_lang = LanguageFiles.size();
@@ -1504,267 +1359,138 @@ void MenuClass::DoMenu() {
 
         } break;  // Languages
 
-        // DKS - Significantly redesigned controls submenu:
         case MENUZUSTAND_TASTEN: {
-            PlayerClass *pCurrentPlayer;
+            auto &player = Player[CurrentPlayer];
+            const auto *joystick = player.GetJoystick();
+            const int action = ControlMenuAction(AktuellerPunkt);
+            auto &layout = joystick ? player.controls.controller : player.controls.keyboard;
 
-            if (CurrentPlayer == 0)
-                pCurrentPlayer = &Player[0];
-            else
-                pCurrentPlayer = &Player[1];
-
-            int action = AktuellerPunkt - MENU_TASTEN_NUM_NON_CONTROLS;
-            bool on_move_line = (action == AKTION_LINKS || action == AKTION_RECHTS || action == AKTION_DUCKEN);
-            bool on_look_line = (action == AKTION_OBEN || action == AKTION_UNTEN);
-            bool on_jump_line = action == AKTION_JUMP;
-
-            // If current player is using a joystick, check if the selected joystick is available
-            // and, if not, make sure controls for it are never selected unless it is changed
-            if (pCurrentPlayer->ControlType == CONTROLTYPE_JOY && AktuellerPunkt > MENU_TASTEN_TYPE_LINE) {
-                int joy_idx = pCurrentPlayer->JoystickIndex;
-                if (joy_idx < 0 || joy_idx >= DirectInput.JoysticksFound || !DirectInput.Joysticks[joy_idx].Active) {
-                    AktuellerPunkt = MENU_TASTEN_TYPE_LINE;
+            if (control_reassignment_occuring) {
+                bool deviceChanged = joystick != remapJoystick;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+                deviceChanged |= joystick && joystick->Instance() != remapInstance;
+#endif
+                if (KeyDown(DIK_ESCAPE) || DirectInput.AnyPauseButtonDown() || deviceChanged) {
+                    control_reassignment_occuring = false;
+                    AuswahlPossible = false;
+                    input_counter = 0.0f;
+                    break;
                 }
-            }
 
-            if (AktuellerPunkt >= MENU_TASTEN_NUM_NON_CONTROLS && !control_reassignment_occuring &&
-                (KeyDown(DIK_DELETE) || KeyDown(DIK_BACK) || joy_delete)) {
-                input_counter = 0.0f;
-                if (pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD) {
-                    pCurrentPlayer->AktionKeyboard[action] = -1;
-                } else if (!on_move_line && !on_look_line &&
-                           !(on_jump_line && pCurrentPlayer->JoystickMode == JOYMODE_JOYSTICK)) {
-                    // Only non-look and non-movement actions are assignable to buttons on joysticks
-                    pCurrentPlayer->AktionJoystick[action] = -1;
+                const int button = joystick ? joystick->PressedBinding() : -1;
+                const int padDirection = joystick ? joystick->PressedDirection() : -1;
+                // Release the input which opened the editor, even if it came from the other player.
+                if (!AuswahlPossible) {
+                    AuswahlPossible = menuControllersReleased && button < 0 && padDirection < 0 && DirectInput.AreAllKeysReleased();
+                    break;
                 }
-            }
 
-            // neue Taste eingeben ?
-            if (control_reassignment_occuring && !selected) {
-                if (AuswahlPossible && AktuellerPunkt >= MENU_TASTEN_NUM_NON_CONTROLS) {
-                    if (pCurrentPlayer->ControlType == CONTROLTYPE_KEYBOARD) {
+                // Capture a complete stick/hat gesture. A thumb can cross one axis first.
+                if (padDirection >= 0) {
+                    if (pendingDirection < 0 || padDirection >= FirstPadDiagonal)
+                        pendingDirection = padDirection;
+                    break;
+                }
+                InputBinding next = InputBinding::Pad(pendingDirection >= 0 ? pendingDirection : button);
+                pendingDirection = -1;
+                if (next.kind == BindingKind::Empty) {
+                    for (int i = 1; i < DirectInput.NumberOfKeys; ++i) {
+                        if (!TastaturPuffer[i])
+                            continue;
+                        const int key = KeyCode(i);
+                        if (key == DIK_TAB || key == DIK_ESCAPE)
+                            continue;
 #if defined(GCW)
-                        // Special abort case for GCW: If the user selects keyboard controls
-                        // and tries to define a key without a keyboard actually attached,
-                        // allow them to back out with the GCW button mapped to 'menu escape'
-
-                        DirectInput.UpdateJoysticks();
-                        if (DirectInput.Joysticks[DirectInput.GetInternalJoystickIndex()].ButtonEscapePressed()) {
-                            control_reassignment_occuring = false;
-                            AuswahlPossible = false;
-                        }
-#endif  // GCW
-        // Neue Taste?
-                        DirectInput.UpdateTastatur();
-
-                        for (int i = 1; i < DirectInput.NumberOfKeys; i++)  // Puffer durchgehen
-                        {
-                            // DKS - Added exclusions for TAB and ESCAPE, as they are hard-coded to
-                            //      be the console and main-menu activation keys, respectively.
-                            //      Also added exclusions for keys 1,2 and 3 because they are
-                            //      hard-coded in the game to be Weapon-selection keys.
-                            int j = KeyCode(i);
-                            if (TastaturPuffer[i] && j != DIK_NUMLOCK && j != DIK_CAPITAL && j != DIK_SCROLL && j != DIK_TAB &&
-                                j != DIK_ESCAPE && j != DIK_1 && j != DIK_2 &&
-                                j != DIK_3)  // ob eine Taste gedrückt wurde
-                            {
-#if defined(GCW)
-                                // DKS - Added exclusion for the Hold Switch (Mapped to home key), as it is
-                                //      hard-coded to be the console-activation key for GCW Zero.
-                                if (j == DIK_HOME)
-                                    break;
-#endif  // GCW
-                                pCurrentPlayer->AktionKeyboard[action] = j;
-                                control_reassignment_occuring = false;
-                                AuswahlPossible = false;
-
-                                while (TastaturPuffer[i])
-                                    DirectInput.UpdateTastatur();
-
-                                input_counter = 0.0f;
-                                break;
-                            }
-                        }
-                    } else {
-                        // Neuer Button?
-                        const DirectJoystickClass& joystick = DirectInput.Joysticks[pCurrentPlayer->JoystickIndex];
-                        if (joystick.Active) {
-#if defined(GCW)
-                            int startButton = DirectInput.GetInternalJoystickMainMenuButton();
-#else
-                            int startButton = joystick.GetMainMenuButton();
-#endif  // GCW
-                            // DKS - TODO - this seems to be where more work is needed in accepting new button input
-                            for (int i = 0; i < joystick.GetNumButtons(); i++) {
-                                if (joystick.JoystickButtons[i]) {
-                                    // Exclusion for button START, as it is hard-coded
-                                    // to be the Exit-to-Main-Menu button and thus cannot be reassigned.
-                                    if (i == startButton)
-                                        break;
-
-                                    pCurrentPlayer->AktionJoystick[action] = i;
-                                    control_reassignment_occuring = false;
-                                    AuswahlPossible = false;
-
-                                    while (joystick.JoystickButtons[i])
-                                        DirectInput.UpdateJoysticks();
-
-                                    input_counter = 0.0f;
-                                }
-                            }
-                        }
+                        if (key == DIK_HOME)
+                            continue;
+#endif
+                        next = InputBinding::Key(key);
+                        if (next.kind != BindingKind::Empty)
+                            break;
                     }
+                }
+                if (next.kind == BindingKind::Empty)
+                    break;
+                const auto conflicts = [&](int other) {
+                    const auto &slots = layout[other];
+                    return next.Overlaps(slots[0]) || next.Overlaps(slots[1]);
+                };
+                if ((action == AKTION_UNTEN && conflicts(AKTION_DUCKEN)) || (action == AKTION_DUCKEN && conflicts(AKTION_UNTEN))) {
+                    bindingNotice = "Crouch and Look Down need separate inputs";
                 } else {
-                    if (!KeyDown(DIK_DELETE) && !KeyDown(DIK_NUMPAD2) && !KeyDown(DIK_NUMPAD8) && !KeyDown(DIK_UP) &&
-                        !KeyDown(DIK_DOWN) && !KeyDown(DIK_RETURN) && !KeyDown(DIK_SPACE) && !KeyDown(DIK_ESCAPE))
-                        AuswahlPossible = true;
+                    auto &pair = layout[action];
+                    // The most recent input is first. A third input drops the oldest.
+                    if (!next.Overlaps(pair[0]))
+                        pair = {next, pair[0]};
+                    control_reassignment_occuring = false;
+                    bindingNotice = nullptr;
                 }
-            } else {
-                if (AktuellerPunkt < 0)
-                    AktuellerPunkt = MENU_TASTEN_NUM_LINES - 1;
+                AuswahlPossible = false;
+                input_counter = 0.0f;
+                break;
+            }
 
-                if (AktuellerPunkt > MENU_TASTEN_NUM_LINES - 1)
-                    AktuellerPunkt = 0;
+            const bool remove = joystick ? joystick->ButtonDeletePressed() : KeyDown(DIK_DELETE);
+            if (action >= 0 && AuswahlPossible && remove) {
+                auto &pair = layout[action];
+                pair = {pair[1], InputBinding{}};
+                input_counter = 0.0f;
+                AuswahlPossible = false;
+                break;
+            }
 
-                // Spieler wechseln
-                if (AuswahlPossible == true) {
-                    PlayerClass *pCurrentPlayer2;
+            const bool right = KeyDown(DIK_NUMPAD6) || KeyDown(DIK_RIGHT) || joy_right;
+            const bool left = KeyDown(DIK_NUMPAD4) || KeyDown(DIK_LEFT) || joy_left;
+            if (!selected && AuswahlPossible && (left || right)) {
+                CurrentPlayer = right ? 1 : 0;
+                AuswahlPossible = false;
+            }
 
-                    if (CurrentPlayer == 0)
-                        pCurrentPlayer2 = &Player[0];
-                    else
-                        pCurrentPlayer2 = &Player[1];
-
-                    if (KeyDown(DIK_NUMPAD6) || KeyDown(DIK_RIGHT) || joy_right) {
-                        input_counter = INPUT_DELAY * 0.75f;  // Delay less than usual
-
-                        if (AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE) {
-                            pCurrentPlayer2->JoystickSchwelle -= Timer.sync(100.0f);
-
-                            if (pCurrentPlayer2->JoystickSchwelle < 100.0f)
-                                pCurrentPlayer2->JoystickSchwelle = 100.0f;
-                        } else if (AktuellerPunkt >= MENU_TASTEN_PLAYER_LINE) {
-                            AuswahlPossible = false;
-                            CurrentPlayer = 1;
-                            pCurrentPlayer2 = &Player[1];
-
-                            if (pCurrentPlayer2->ControlType == CONTROLTYPE_KEYBOARD &&
-                                (AktuellerPunkt == MENU_TASTEN_MODE_LINE ||
-                                 AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE))
-                                AktuellerPunkt = MENU_TASTEN_TYPE_LINE;
-                        }
+            if (selected) {
+                AuswahlPossible = false;
+                input_counter = 0.0f;
+                switch (AktuellerPunkt) {
+                    case MENU_TASTEN_RUMBLE_LINE: {
+                        const int count = static_cast<int>(RumbleStrength::Count);
+                        player.rumbleStrength = static_cast<RumbleStrength>((static_cast<int>(player.rumbleStrength) + 1) % count);
+                        if (player.rumbleStrength != RumbleStrength::Off)
+                            player.PlayFeedback(FFE_MEDIUMRUMBLE);
+                        else if (joystick)
+                            joystick->StopForceFeedbackEffect(FFE_MEDIUMRUMBLE);
+                        break;
                     }
-
-                    // DKS - TODO allow a second joystick to adjust this
-                    if (KeyDown(DIK_NUMPAD4) || KeyDown(DIK_LEFT) || joy_left) {
-                        input_counter = INPUT_DELAY * 0.75f;  // Delay less than usual
-
-                        if (AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE) {
-                            pCurrentPlayer2->JoystickSchwelle += Timer.sync(100.0f);
-
-                            if (pCurrentPlayer2->JoystickSchwelle > 900.0f)
-                                pCurrentPlayer2->JoystickSchwelle = 900.0f;
-                        } else if (AktuellerPunkt >= MENU_TASTEN_PLAYER_LINE) {
-                            AuswahlPossible = false;
-                            CurrentPlayer = 0;
-                            pCurrentPlayer2 = &Player[0];
-
-                            if (pCurrentPlayer2->ControlType == CONTROLTYPE_KEYBOARD &&
-                                (AktuellerPunkt == MENU_TASTEN_MODE_LINE ||
-                                 AktuellerPunkt == MENU_TASTEN_SENSITIVITY_LINE))
-                                AktuellerPunkt = MENU_TASTEN_TYPE_LINE;
-                        }
-                    }
+                    case MENU_TASTEN_DEFAULTS_LINE:
+                        CreateDefaultControlsConfig(CurrentPlayer);
+                        DirectInput.AssignPlayerJoysticks();
+                        break;
+                    case MENU_TASTEN_PLAYER_LINE:
+                        CurrentPlayer = 1 - CurrentPlayer;
+                        break;
+                    case MENU_TASTEN_TYPE_LINE:
+                        DirectInput.CyclePlayerJoystick(CurrentPlayer);
+                        break;
+                    default:
+                        if (action < 0)
+                            break;
+                        control_reassignment_occuring = true;
+                        bindingNotice = nullptr;
+                        pendingDirection = -1;
+                        remapJoystick = joystick;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+                        remapInstance = joystick ? joystick->Instance() : -1;
+#endif
+                        break;
                 }
+            }
 
-                // Punkt gewählt
-                //
-                if (selected) {
-                    AuswahlPossible = false;
-                    input_counter = 0.0f;
-
-                    // Taste ändern?
-                    if (AktuellerPunkt >= MENU_TASTEN_NUM_NON_CONTROLS) {
-                        if (pCurrentPlayer->ControlType == CONTROLTYPE_JOY &&
-                            (on_move_line || (on_jump_line && pCurrentPlayer->JoystickMode == JOYMODE_JOYSTICK))) {
-                            // If control mode is joystick/joypad, movement and look up/down can only be
-                            //  assigned to either the DPAD HAT or the analog stick:
-                            pCurrentPlayer->Walk_UseAxxis = !pCurrentPlayer->Walk_UseAxxis;
-                        } else if (pCurrentPlayer->ControlType == CONTROLTYPE_JOY && on_look_line) {
-                            pCurrentPlayer->Look_UseAxxis = !pCurrentPlayer->Look_UseAxxis;
-                        } else {
-                            control_reassignment_occuring = true;
-                            // Do not proceed until all keys/buttons are released:
-                            while (DirectInput.AnyKeyDown() || DirectInput.AnyButtonDown()) {
-                                DirectInput.UpdateTastatur();
-                                DirectInput.UpdateJoysticks();
-                            }
-                        }
-                    } else {
-                        PlayerClass *pCurrentPlayer2;
-
-                        if (CurrentPlayer == 0)
-                            pCurrentPlayer2 = &Player[0];
-                        else
-                            pCurrentPlayer2 = &Player[1];
-
-                        if (AktuellerPunkt == MENU_TASTEN_DEFAULTS_LINE) {
-                            // Load default controls for players 1/2
-                            CreateDefaultControlsConfig(0);
-                            CreateDefaultControlsConfig(1);
-                        }
-
-                        // Game-wide force-feedback enable/disable
-                        if (AktuellerPunkt == MENU_TASTEN_FORCEFEEDBACK_LINE) {
-                            UseForceFeedback = !UseForceFeedback;
-                        }
-
-                        // Joymode ändern?
-                        if (AktuellerPunkt == MENU_TASTEN_MODE_LINE) {
-                            if (pCurrentPlayer2->JoystickMode == JOYMODE_JOYSTICK)
-                                pCurrentPlayer2->JoystickMode = JOYMODE_JOYPAD;
-                            else
-                                pCurrentPlayer2->JoystickMode = JOYMODE_JOYSTICK;
-                        }
-
-                        // Controller Type ändern?
-                        if (AktuellerPunkt == MENU_TASTEN_TYPE_LINE) {
-                            // Joytick dran?
-                            if (JoystickFound == true) {
-                                // Von Keyboard auf Joystick wechseln?
-                                if (pCurrentPlayer2->ControlType == CONTROLTYPE_KEYBOARD) {
-                                    pCurrentPlayer2->ControlType = CONTROLTYPE_JOY;
-                                    pCurrentPlayer2->JoystickIndex = 0;
-                                }
-
-                                // Von Joystick auf Keyboard wechseln?
-                                else {
-                                    pCurrentPlayer2->JoystickIndex++;
-
-                                    if (pCurrentPlayer2->JoystickIndex >= DirectInput.JoysticksFound) {
-                                        pCurrentPlayer2->ControlType = CONTROLTYPE_KEYBOARD;
-                                        pCurrentPlayer2->JoystickIndex = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // zurück zum Hauptmenu ?
-                if ((KeyDown(DIK_ESCAPE) || joy_escape) && AuswahlPossible == true) {
-                    input_counter = 0.0f;
-                    // Neue Tastennamen für die Tutorial-Texte übernehmen
-                    InitReplacers();
-
-                    // Sound Config speichern
-                    SaveConfig();
-
-                    AuswahlPossible = false;
-                    AktuellerZustand = MENUZUSTAND_VOLUMES;
-                    AktuellerPunkt = MENUPUNKT_VOLUMES_TASTEN;
-                    SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
-                }
+            if ((KeyDown(DIK_ESCAPE) || joy_escape) && AuswahlPossible) {
+                input_counter = 0.0f;
+                InvalidateTutorialText();
+                SaveConfig();
+                AuswahlPossible = false;
+                AktuellerZustand = MENUZUSTAND_VOLUMES;
+                AktuellerPunkt = MENUPUNKT_VOLUMES_TASTEN;
+                SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
             }
         } break;  // Tasten
 
@@ -1810,15 +1536,15 @@ void MenuClass::DoMenu() {
                 {
                     if (Player[i].ControlType != CONTROLTYPE_KEYBOARD)
                         continue;
-                    if (KeyDown(Player[i].AktionKeyboard[AKTION_RECHTS]))
+                    if (Player[i].ActionPressed(AKTION_RECHTS, nullptr))
                         joy_right = true;
-                    if (KeyDown(Player[i].AktionKeyboard[AKTION_LINKS]))
+                    if (Player[i].ActionPressed(AKTION_LINKS, nullptr))
                         joy_left = true;
-                    if (KeyDown(Player[i].AktionKeyboard[AKTION_OBEN]))
+                    if (Player[i].ActionPressed(AKTION_OBEN, nullptr))
                         joy_up = true;
-                    if (KeyDown(Player[i].AktionKeyboard[AKTION_DUCKEN]))
+                    if (Player[i].ActionPressed(AKTION_DUCKEN, nullptr))
                         joy_down = true;
-                    if (KeyDown(Player[i].AktionKeyboard[AKTION_SHOOT]))
+                    if (Player[i].ActionPressed(AKTION_SHOOT, nullptr))
                         joy_enter = true;
                 }
             }
@@ -1961,116 +1687,65 @@ void MenuClass::DoMenu() {
         } break;  // Namen eingeben
 
         // Neues Spiel starten / Savegame laden
-        case MENUZUSTAND_NEWGAME: {
-            if (AktuellerPunkt < 0)
-                AktuellerPunkt = 2;
-
-            if (AktuellerPunkt > 2)
-                AktuellerPunkt = 0;
-
-            // Zurück ins Haupt Menu ?
-            if (((!CommandLineParams.Arcade && KeyDown(DIK_ESCAPE)) || joy_escape) && AuswahlPossible == true) {
+        case MENUZUSTAND_STARTGAME:
+        case MENUZUSTAND_SELECTSKILL:
+        case MENUZUSTAND_PLAYERCOUNT:
+        case MENUZUSTAND_TUTORIAL: {
+            const int count = AktuellerZustand == MENUZUSTAND_SELECTSKILL ? 4 : 2;
+            AktuellerPunkt = (AktuellerPunkt + count) % count;
+            if (((!CommandLineParams.Arcade && KeyDown(DIK_ESCAPE)) || joy_escape) && AuswahlPossible) {
                 input_counter = 0.0f;
-                AktuellerZustand = MENUZUSTAND_MAINMENU;
-                AktuellerPunkt = MENUPUNKT_STARTGAME;
-            }
-
-            // Menu-Punkt ausgewählt ?
-            if (selected) {
                 AuswahlPossible = false;
-
-                // Tutorial spielen?
-                if (AktuellerPunkt == MENUPUNKT_NEWGAME_TUTORIAL) {
-                    SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
-
-                    // Game starten mit Tutorial
-                    NUMPLAYERS = 1;
-                    RunningTutorial = true;
-                    Skill = SKILL_EASY;
-                    //					SoundManager.StopSong(MUSIC::MENU, false);
-                    InitNewGame();
-                    InitNewGameLevel();
-                    SpielZustand = GameStateEnum::GAMELOOP;
-                }
-
-                // Neues Spiel starten ?
-                if (AktuellerPunkt == MENUPUNKT_NEWGAME_STARTNEWGAME) {
+                if (AktuellerZustand == MENUZUSTAND_TUTORIAL) {
                     AktuellerZustand = MENUZUSTAND_PLAYERCOUNT;
-                    AktuellerPunkt = 0;  // Auf Medium anfangen
-                }
-
-                // altes Spiel laden ?
-                else if (AktuellerPunkt == MENUPUNKT_NEWGAME_LOADGAME) {
-                    AktuellerZustand = MENUZUSTAND_LOADGAME;
+                    AktuellerPunkt = pendingPlayers - 1;
+                } else if (AktuellerZustand == MENUZUSTAND_PLAYERCOUNT) {
+                    AktuellerZustand = MENUZUSTAND_SELECTSKILL;
+                    AktuellerPunkt = pendingSkill;
+                } else if (AktuellerZustand == MENUZUSTAND_SELECTSKILL) {
+                    AktuellerZustand = MENUZUSTAND_STARTGAME;
                     AktuellerPunkt = 0;
-                    LoadSavegames();
+                } else {
+                    AktuellerZustand = MENUZUSTAND_MAINMENU;
+                    AktuellerPunkt = MENUPUNKT_STARTGAME;
                 }
-
+            } else if (selected) {
+                AuswahlPossible = false;
                 SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
+                if (AktuellerZustand == MENUZUSTAND_STARTGAME) {
+                    if (AktuellerPunkt == 0) {
+                        pendingSkill = SKILL_MEDIUM;
+                        pendingPlayers = 1;
+                        AktuellerZustand = MENUZUSTAND_SELECTSKILL;
+                        AktuellerPunkt = pendingSkill;
+                    } else {
+                        LoadSavegames();
+                        AktuellerZustand = MENUZUSTAND_LOADGAME;
+                        AktuellerPunkt = 0;
+                    }
+                } else if (AktuellerZustand == MENUZUSTAND_SELECTSKILL) {
+                    pendingSkill = AktuellerPunkt;
+                    AktuellerZustand = MENUZUSTAND_PLAYERCOUNT;
+                    AktuellerPunkt = pendingPlayers - 1;
+                } else if (AktuellerZustand == MENUZUSTAND_PLAYERCOUNT) {
+                    pendingPlayers = AktuellerPunkt + 1;
+                    AktuellerZustand = MENUZUSTAND_TUTORIAL;
+                    AktuellerPunkt = 1;
+                } else {
+                    NUMPLAYERS = pendingPlayers;
+                    Skill = pendingSkill;
+                    RunningTutorial = AktuellerPunkt == 0;
+                    SoundManager.StopSongs();
+                    DisplayHintNr = -1;
+                    if (RunningTutorial) {
+                        InitNewGame();
+                        InitNewGameLevel();
+                    } else {
+                        StartIntro();
+                    }
+                }
             }
-        } break;  // SPIEL VERLASSEN
-
-        case MENUZUSTAND_PLAYERCOUNT: {
-            if (AktuellerPunkt < 0)
-                AktuellerPunkt = 1;
-
-            if (AktuellerPunkt > 1)
-                AktuellerPunkt = 0;
-
-            // Zurück ins Haupt Menu ?
-            if (((!CommandLineParams.Arcade && KeyDown(DIK_ESCAPE)) || joy_escape) && AuswahlPossible == true) {
-                input_counter = 0.0f;
-                AuswahlPossible = false;
-                AktuellerZustand = MENUZUSTAND_NEWGAME;
-                AktuellerPunkt = MENUPUNKT_NEWGAME_STARTNEWGAME;
-            }
-
-            // Menu-Punkt ausgewählt ?
-            if (selected) {
-                tempNUMPLAYERS = AktuellerPunkt + 1;
-                AktuellerPunkt = 1;
-
-                AktuellerZustand = MENUZUSTAND_SELECTSKILL;
-                SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
-
-                AuswahlPossible = false;
-            }
-        } break;  // SPIEL VERLASSEN
-
-        // Skill auswählen
-        case MENUZUSTAND_SELECTSKILL: {
-            if (AktuellerPunkt < 0)
-                AktuellerPunkt = 3;
-
-            if (AktuellerPunkt > 3)
-                AktuellerPunkt = 0;
-
-            // Zurück ins New Game Menu ?
-            if (((!CommandLineParams.Arcade && KeyDown(DIK_ESCAPE)) || joy_escape) && AuswahlPossible == true) {
-                input_counter = 0.0f;
-                AuswahlPossible = false;
-                AktuellerZustand = MENUZUSTAND_PLAYERCOUNT;
-                AktuellerPunkt = tempNUMPLAYERS - 1;
-            }
-
-            // Menu-Punkt ausgewählt ?
-            if (selected) {
-                NUMPLAYERS = tempNUMPLAYERS;
-                AuswahlPossible = false;
-                RunningTutorial = false;
-                SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
-
-                // Game starten
-                // mit gewähltem Skill
-                Skill = AktuellerPunkt;
-
-                // Intro initialisieren
-                SoundManager.StopSongs();
-                DisplayHintNr = -1;
-
-                StartIntro();
-            }
-        } break;  // Select Skill
+        } break;
 
         // Savegame zum Laden wählen
         case MENUZUSTAND_LOADGAME: {
@@ -2083,8 +1758,8 @@ void MenuClass::DoMenu() {
             // Zurück ins New Game Menu ?
             if (((!CommandLineParams.Arcade && KeyDown(DIK_ESCAPE)) || joy_escape) && AuswahlPossible == true) {
                 input_counter = 0.0f;
-                AktuellerZustand = MENUZUSTAND_NEWGAME;
-                AktuellerPunkt = MENUPUNKT_NEWGAME_LOADGAME;
+                AktuellerZustand = MENUZUSTAND_STARTGAME;
+                AktuellerPunkt = 1;
                 AuswahlPossible = false;
             }
 
@@ -2093,7 +1768,6 @@ void MenuClass::DoMenu() {
             // und wenn das nicht der Fall ist, dann das Savegame laden und
             // das Spiel starten
             if (selected) {
-                RunningTutorial = false;
 
                 AuswahlPossible = false;
                 SoundManager.PlayWave(100, 128, 11025, SOUND::CLICK);
@@ -2101,6 +1775,7 @@ void MenuClass::DoMenu() {
                 // Aktuell gewähltes Savegame laden, wenn es existiert
                 // bzw die Werte aus den schon geladenen Savegames übernehmen
                 if (Savegames[AktuellerPunkt].Stage >= 0) {
+                    RunningTutorial = false;
                     // DKS - Original order was like so:
                     // InitNewGame();
                     // NUMPLAYERS = Savegames[AktuellerPunkt].Players;
@@ -2627,6 +2302,8 @@ void MenuClass::CheckForNewHighscore() {
             break;
         }
 
+    // The high-score entry has captured the stage. A finished game cannot be resumed.
+    Stage = -1;
     SpielZustand = GameStateEnum::MAINMENU;
 }
 
@@ -2635,7 +2312,7 @@ void MenuClass::CheckForNewHighscore() {
 // --------------------------------------------------------------------------------------
 
 void MenuClass::ResetProgressBar() {
-    LoadingProgress = 320.0f;
+    LoadingProgress = 318.0f;
 }
 
 void MenuClass::StartProgressBar(int items) {
@@ -2644,15 +2321,22 @@ void MenuClass::StartProgressBar(int items) {
     LoadingItemsLoaded = 0;
 }
 
-void MenuClass::UpdateProgressBar() {
-    LoadingScreen.RenderSprite((RENDERWIDTH - 360) / 2, (RENDERHEIGHT - 60) / 2 + 5, 0x88FFFFFF);
+bool MenuClass::UpdateLoadingProgress(bool finished) {
+    if (!finished) {
+        ++LoadingItemsLoaded;
+        if (LoadingItemsToLoad > 0)
+            LoadingProgress = std::min(318.0f, LoadingItemsLoaded * 318.0f / LoadingItemsToLoad);
+    }
 
+    const Uint32 now = SDL_GetTicks();
+    if (!finished && LoadingItemsLoaded != 1 && now - LastLoadingFrame < 33)
+        return false;
+    LastLoadingFrame = now;
+    return true;
+}
+
+void MenuClass::DrawProgressBar() {
+    LoadingScreen.RenderSprite((RENDERWIDTH - 360) / 2, (RENDERHEIGHT - 60) / 2 + 5, 0x88FFFFFF);
     LoadingBar.SetRect(0, 0, static_cast<int>(LoadingProgress), 19);
     LoadingBar.RenderSprite((RENDERWIDTH - 318) / 2, (RENDERHEIGHT - 19) / 2 + 5, 0x88FFFFFF);
-
-    LoadingItemsLoaded++;
-
-    LoadingProgress += 318.0f / LoadingItemsToLoad;
-    if (LoadingProgress > 318.0f)
-        LoadingProgress = 318.0f;
 }

@@ -8,31 +8,15 @@
 #include "Logdatei.hpp"
 #include <iostream>
 #include <filesystem>
-#include <cstdlib>
-namespace fs = std::filesystem;
 
-/**
- * Construct the Logger object and open the logfile
- **/
-Logdatei::Logdatei(const std::string &filename)
-    : filename_(filename), file(std::ofstream(filename)), delLogFile(false) {
-    // Reduce unnecessary syncs
-    std::cout.sync_with_stdio(false);
-
-    if (!file) {
-        std::cerr << "Unable to open logfile (" << filename << ")!" << std::endl;
-        exit(EXIT_FAILURE);
-    }
+void Logdatei::OpenFile(const std::string &filename) {
+    file.open(std::filesystem::u8path(filename));
+    if (!file)
+        std::cerr << "Unable to open log file (" << filename << ")!" << std::endl;
 }
 
 Logdatei::~Logdatei() {
-    // make sure no output gets lost
     flush();
-    file.close();
-
-    // Kein Fehler im Game? Dann Logfile löschen
-    if (delLogFile)
-        fs::remove(fs::path(filename_));
 }
 
 /**
@@ -41,11 +25,11 @@ Logdatei::~Logdatei() {
 void Logdatei::flush() {
     // print to both outputs
     std::cout << this->str();
-    this->file << this->str();
+    if (file)
+        file << this->str() << std::flush;
 
     // flush both streams to ensure they are up-to-date
     std::cout << std::flush;
-    this->file << std::flush;
 
     // empty internal buffer
     this->str("");

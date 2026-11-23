@@ -29,7 +29,8 @@
 class DirectGraphicsFont {
   private:
     DirectGraphicsSprite *mTexture;  // Textur mit Font-Grafikdaten
-    int mXChars;                     // Anzahl Zeichen in X-Richtung
+    int mGlyphCount = 0;
+    bool DrawGlyph(float x, float y, int glyph, D3DCOLOR color, int scale);
 
     // DKS - Character widths are now hard-coded arrays we merely point to:
     // char					mCharLength[256];				// Länge der Zeichen in Pixel

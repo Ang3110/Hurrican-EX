@@ -13,6 +13,8 @@
 // --------------------------------------------------------------------------------------
 
 #include "CCracktro.hpp"
+#include <cstring>
+#include <iterator>
 #include "DX8Input.hpp"
 #include "DX8Sound.hpp"
 
@@ -81,20 +83,13 @@ CCracktro::CCracktro() {
     SinPos = 0.0f;
 
     for (auto& star: Stars) {
-        star.Count = static_cast<float>(GetRandom(RENDERWIDTH));
+        star.Count = static_cast<float>(GetRandom(RENDERWIDTH)) / RENDERWIDTH;
         star.Abstand = static_cast<float>(GetRandom(140) + 340);
         star.Ebene = GetRandom(200) + 55;
     }
 
-    // DKS - No need to check for any return value:
-    // if (SoundManager.LoadSong("Cracktro.it", MUSIC::CRACKTRO) == true)
-    //{
-    //    SoundManager.PlaySong(MUSIC::CRACKTRO, false);
-    //    SoundManager.SetAbsoluteSongVolume(MUSIC::CRACKTRO, 255);
-    //}
     SoundManager.LoadSong("Cracktro.it", MUSIC::CRACKTRO);
     SoundManager.PlaySong(MUSIC::CRACKTRO, false);
-    SoundManager.SetAbsoluteSongVolume(MUSIC::CRACKTRO, 255);
 
     DirectGraphics.SetAdditiveMode();
     DirectGraphics.SetColorKeyMode();
@@ -120,57 +115,49 @@ CCracktro::~CCracktro() {
 
 void CCracktro::Main() {
     DirectGraphics.ClearBackBuffer();
+    const float left = DirectGraphics.InterfaceLeft();
+    const int width = DirectGraphics.GetViewWidth();
 
     // --------------------------------------------------------------------------------------
     // Sterne
     // --------------------------------------------------------------------------------------
 
     for (auto& star: Stars) {
-        star.Count -= Timer.sync(star.Ebene * 0.1f);
+        star.Count -= Timer.sync(star.Ebene * 0.1f / width);
 
         if (star.Count < 0.0f)
-            star.Count += RENDERWIDTH;
+            star.Count += 1.0f;
 
-        RenderRect(star.Count, star.Abstand, 4, 2, D3DCOLOR_RGBA(255, 255, 255, star.Ebene));
+        RenderRect(left + star.Count * width, star.Abstand, 4, 2, D3DCOLOR_RGBA(255, 255, 255, star.Ebene));
     }
 
     // --------------------------------------------------------------------------------------
     // Sinus Scroller
     // --------------------------------------------------------------------------------------
-    float xchar = 0;
     static float colpos = 0.0f;
     static float LogoPos = 0.0f;
 
-    float s = sinf(SinPos) * 80.0f;
-    s = abs(static_cast<int>(s));
-
     colpos += Timer.sync(6.0f);
 
-    for (int i = 0; i < 43; i++) {
-        pFont->DrawDemoChar(xchar - ScrollOffset, static_cast<float>(450 - s), CrackText[i + ScrollPos],
-                            ScrollCol[static_cast<int>(colpos + i) % (sizeof(ScrollCol) / sizeof(D3DCOLOR))]);
-
-        if (CrackText[i + ScrollPos] != 32)
-            xchar += pFont->GetCharLength(CrackText[i + ScrollPos] - 33) + 2;
-        else
-            xchar += pFont->GetXCharSize();
-    }
-
-    ScrollOffset += Timer.sync(12.0f);
-
-    int l;
-    if (CrackText[ScrollPos] == 32)
-        l = pFont->GetXCharSize();
-    else
-        l = pFont->GetCharLength(CrackText[ScrollPos] - 33) + 2;
-
-    if (ScrollOffset > l) {
-        ScrollOffset -= l;
-        ScrollPos++;
-
-        if (static_cast<unsigned int>(ScrollPos) > strlen(CrackText) - 50)
-            ScrollPos = 0;
-    }
+    const auto drawScroller = [&](const char *line, int &position, float &offset, float y, float speed, bool rainbow) {
+        const auto advance = [this](char ch) {
+            return ch == ' ' ? pFont->GetXCharSize() : pFont->GetCharLength(ch - '!') + 2;
+        };
+        const int length = static_cast<int>(std::strlen(line));
+        float x = left - offset;
+        for (int i = 0; x < left + width; ++i) {
+            const char ch = line[(position + i) % length];
+            const auto color = rainbow ? ScrollCol[static_cast<int>(colpos + i) % std::size(ScrollCol)] : 0xFF000000;
+            pFont->DrawDemoChar(x, y, ch, color);
+            x += advance(ch);
+        }
+        offset += Timer.sync(speed);
+        while (offset > advance(line[position])) {
+            offset -= advance(line[position]);
+            position = (position + 1) % length;
+        }
+    };
+    drawScroller(CrackText, ScrollPos, ScrollOffset, 450.0f - abs(static_cast<int>(sinf(SinPos) * 80.0f)), 12.0f, true);
 
     SinPos += Timer.sync(0.3f);
     if (SinPos > TWO_PI)
@@ -209,38 +196,14 @@ void CCracktro::Main() {
     // --------------------------------------------------------------------------------------
 
     for (int i = 0; i < 7; i++)
-        Bars[1].RenderSpriteScaled(0, 95 - sin(SinPos + i / 5.0f) * 90.0f, RENDERWIDTH, 6 + i * 3, 0, 0xFFFFFFFF);
+        Bars[1].RenderSpriteScaled(left, 95 - sin(SinPos + i / 5.0f) * 90.0f, width, 6 + i * 3, 0, 0xFFFFFFFF);
 
-    Bars[2].RenderSpriteScaled(0, 255, RENDERWIDTH, 100, 0, 0xFFFFFFFF);
+    Bars[2].RenderSpriteScaled(left, 255, width, 100, 0, 0xFFFFFFFF);
 
     // --------------------------------------------------------------------------------------
     // Scroller 2
     // --------------------------------------------------------------------------------------
-    xchar = 0;
-
-    for (int i = 0; i < 50; i++) {
-        pFont->DrawDemoChar(xchar - ScrollOffset2, 295, StaticText[i + ScrollPos2], 0xFF000000);
-
-        if (StaticText[i + ScrollPos2] != 32)
-            xchar += pFont->GetCharLength(StaticText[i + ScrollPos2] - 33) + 2;
-        else
-            xchar += pFont->GetXCharSize();
-    }
-
-    if (StaticText[ScrollPos2] == 32)
-        l = pFont->GetXCharSize();
-    else
-        l = pFont->GetCharLength(StaticText[ScrollPos2] - 33) + 2;
-
-    ScrollOffset2 += Timer.sync(10.0f);
-
-    if (ScrollOffset2 > l) {
-        ScrollOffset2 -= l;
-        ScrollPos2++;
-
-        if (static_cast<unsigned int>(ScrollPos2) > strlen(StaticText) - 50)
-            ScrollPos2 = 0;
-    }
+    drawScroller(StaticText, ScrollPos2, ScrollOffset2, 295, 10.0f, false);
 
     // --------------------------------------------------------------------------------------
     // Logo (vor Copper Bars)
@@ -283,8 +246,8 @@ void CCracktro::Main() {
     float yo = 220 - cos(LogoPos) * 10.0f;
     D3DCOLOR col = BlinkCol[static_cast<int>(blinkpos) % (sizeof(BlinkCol) / sizeof(D3DCOLOR))];
 
-    RenderRect(0, yo, RENDERWIDTH, 2, col);
-    RenderRect(0, yo + 20.0f, RENDERWIDTH, 2, col);
+    RenderRect(left, yo, width, 2, col);
+    RenderRect(left, yo + 20.0f, width, 2, col);
 
     pFont->DrawDemoText(
         -sin(LogoPos) * 140.0f + static_cast<float>(626 - pFont->DemoStringLength(BlinkText[fontoff])) / 2.0f,
@@ -316,7 +279,7 @@ void CCracktro::Load() {
 
     // farbige Balken
     for (int i = 0; i < (RENDERHEIGHT / 2); i++)
-        RenderRect(0, static_cast<float>(i * 2), RENDERWIDTH, 2,
+        RenderRect(DirectGraphics.InterfaceLeft(), static_cast<float>(i * 2), DirectGraphics.GetViewWidth(), 2,
                    ScrollCol[rand() % (static_cast<int>(sizeof(ScrollCol) / sizeof(D3DCOLOR)))]);
 
     count -= Timer.sync(1.0f);

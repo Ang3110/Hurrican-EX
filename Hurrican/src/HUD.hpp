@@ -67,6 +67,7 @@ class HUDClass {
     //      to allow statically-allocated HUD global var (used to be dynamically allocated)
     void LoadSprites();
 
+    float Bottom() const { return ypos + HUDGfx.itsYFrameSize; }
     void UpdateValues();                 // Werte im HUD ändern
     void ShowHUD();                      // HUD anzeigen
     void RenderBossHUD();                // Boss HUD anzeigen

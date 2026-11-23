@@ -18,14 +18,11 @@
 #include "Intro.hpp"
 #include "Outtro.hpp"
 
-enum class ScreenMode {
-  FULLSCREEN,
-  FULLSCREEN_STRETCHED,
-  WINDOW
-};
+#include <optional>
 
 struct sCommandLineParams {
-    ScreenMode RunWindowMode;
+    std::optional<bool> Fullscreen;
+    std::optional<DisplayAspect> Aspect;
     bool RunOwnLevelList;
     bool RunUserLevel;
     bool Scanlines;
@@ -41,10 +38,12 @@ struct sCommandLineParams {
     uint16_t TexSizeMin;
     bool AllowNPotTextureSizes;
     bool ShowFPS;
-    bool VSync;
+    std::optional<bool> VSync;
     uint8_t ScreenDepth;
     bool LowRes;
     bool Arcade;
+
+    bool HasCrtEffects() const { return Scanlines || ColorBleed || ScreenCurvature || ScreenNoise; }
 };
 
 // --------------------------------------------------------------------------------------
@@ -77,6 +76,8 @@ constexpr int RENDERHEIGHT = 480;
 bool GameInit();  // Spiel vor  dem Cracktro initialisieren
 bool GameInit2();                           // Spiel nach dem Cracktro initialisieren
 bool GameExit();                            // Spiel de-initialisieren
+void ProcessEvents();
+bool SaveDisplaySettings(const DisplaySettings &settings);
 bool Heartbeat();                           // Haupt Game Loop
 
 // DKS - I made a separate set of spritesheets with blue coloring for Player 2, so these

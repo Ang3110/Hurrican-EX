@@ -419,10 +419,8 @@ void ConsoleClass::CheckCommands() {
         pDefaultFont->DrawText(3, 458, buf.c_str(), 0xFF00FF00);
         pDefaultFont->DrawText(3, 470, TileEngine.Beschreibung, 0xFF00FF00);
 
+        bool success = DirectGraphics.TakeScreenshot("MiniMap.bmp");
         DirectGraphics.ShowBackBuffer();
-
-        // Screenshot machen
-        bool success = DirectGraphics.TakeScreenshot("MiniMap.bmp", RENDERWIDTH, RENDERHEIGHT);
 
         // Show the map for 2 seconds
         Timer.wait(2000);
@@ -548,38 +546,37 @@ void ConsoleClass::CheckInput() {
         joy_counter = JOY_DELAY;
     }
 
-    if (joy_counter >= JOY_DELAY && Player[0].ControlType == CONTROLTYPE_JOY && JoystickFound) {
+    if (const auto *joystick = Player[0].GetJoystick(); joystick && joy_counter >= JOY_DELAY) {
         joy_counter = 0.0f;
-        int joy_idx = Player[0].JoystickIndex;
         bool up = false;
         bool down = false;
         bool left = false;
         bool right = false;
 
-        if (DirectInput.Joysticks[joy_idx].JoystickPOV != -1) {
+        if (joystick->JoystickPOV != -1) {
             // HAT switch is pressed
-            if (DirectInput.Joysticks[joy_idx].JoystickPOV >= 4500 * 1 &&
-                DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 3) {
+            if (joystick->JoystickPOV >= 4500 * 1 &&
+                joystick->JoystickPOV <= 4500 * 3) {
                 right = true;
-            } else if (DirectInput.Joysticks[joy_idx].JoystickPOV >= 4500 * 5 &&
-                       DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 7) {
+            } else if (joystick->JoystickPOV >= 4500 * 5 &&
+                       joystick->JoystickPOV <= 4500 * 7) {
                 left = true;
-            } else if (DirectInput.Joysticks[joy_idx].JoystickPOV > 4500 * 3 &&
-                       DirectInput.Joysticks[joy_idx].JoystickPOV < 4500 * 5) {
+            } else if (joystick->JoystickPOV > 4500 * 3 &&
+                       joystick->JoystickPOV < 4500 * 5) {
                 down = true;
-            } else if ((DirectInput.Joysticks[joy_idx].JoystickPOV > 4500 * 7 &&
-                        DirectInput.Joysticks[joy_idx].JoystickPOV <= 4500 * 8) ||
-                       (DirectInput.Joysticks[joy_idx].JoystickPOV >= 0 &&
-                        DirectInput.Joysticks[joy_idx].JoystickPOV < 4500 * 1)) {
+            } else if ((joystick->JoystickPOV > 4500 * 7 &&
+                        joystick->JoystickPOV <= 4500 * 8) ||
+                       (joystick->JoystickPOV >= 0 &&
+                        joystick->JoystickPOV < 4500 * 1)) {
                 up = true;
             }
-        } else if (DirectInput.Joysticks[joy_idx].JoystickX > Player[0].JoystickSchwelle) {
+        } else if (joystick->JoystickX > JoystickDeadzone) {
             right = true;
-        } else if (DirectInput.Joysticks[joy_idx].JoystickX < -Player[0].JoystickSchwelle) {
+        } else if (joystick->JoystickX < -JoystickDeadzone) {
             left = true;
-        } else if (DirectInput.Joysticks[joy_idx].JoystickY > Player[0].JoystickSchwelle) {
+        } else if (joystick->JoystickY > JoystickDeadzone) {
             down = true;
-        } else if (DirectInput.Joysticks[joy_idx].JoystickY < -Player[0].JoystickSchwelle) {
+        } else if (joystick->JoystickY < -JoystickDeadzone) {
             up = true;
         }
 
@@ -615,7 +612,7 @@ void ConsoleClass::CheckInput() {
         }
 
         // Now, handle enter/return (Button 0)
-        if (DirectInput.Joysticks[joy_idx].JoystickButtons[0]) {
+        if (joystick->ButtonEnterPressed()) {
             if (strlen(Buffer) > 0) {
                 CheckCommands();
                 ScrollUp();
@@ -790,8 +787,6 @@ bool ConsoleClass::DoConsole() {
 
     // Und anzeigen
     ShowConsole();
-
-    SetScreenShake();
 
     return true;
 }  // DoCOnsole

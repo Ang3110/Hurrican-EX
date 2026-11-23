@@ -319,7 +319,7 @@ class PartikelsystemClass {
     void ClearDeadParticles();          // Removes all dead particles
     void ClearAll();                    // Alle Objekte löschen
     int GetNumPartikel() const;         // Zahl der Partikel zurückliefern
-    void DoPartikel();                  // Alle Partikel der Liste animieren/anzeigen
+    void DoPartikel(bool draw = true);
     void DoPartikelSpecial(bool ShowThem);  // Alle Partikel der Liste animieren/anzeigen
     void DrawOnly();                    // Alle Partikel der Liste nur anzeigen
     void DoThunder();

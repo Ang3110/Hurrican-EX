@@ -54,6 +54,7 @@ class OuttroClass {
     float px[2], py[2], xs[2], ys[2];
 
     void InitPlayerPos();
+    void DrawBackground(int top);
 
   public:
     OuttroClass();    // Konstruktor

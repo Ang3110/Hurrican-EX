@@ -20,6 +20,7 @@
 #include "CDragonHack.hpp"
 #include "Globals.hpp"
 
+#include <array>
 #include <cstdlib>
 
 // --------------------------------------------------------------------------------------
@@ -378,7 +379,7 @@ class WaterSinTableClass {
     // table should be negated.
     bool ConvertToTableIndex(int &idx) {
         bool negate_result = false;
-        idx %= 64;
+        idx = static_cast<unsigned>(idx) % 64;
         int increments_past_quad = idx % 16;
         int quad = idx / 16;
 
@@ -426,7 +427,9 @@ class TileEngineClass {
     float CloudMovement;
     int TileAnimPhase;                      // Phase der Tile Animation
     float ScrollSpeedX, ScrollSpeedY;       // Scrollspeed
-    VERTEX2D TilesToRender[40 * 30 * 6];    // Alle zu rendernden Leveltiles
+    std::vector<LevelObjectStruct> walkoutExits;
+    static constexpr float maxCoopViewScale = 1.16f;
+    std::vector<VERTEX2D> TilesToRender;
     VERTEX2D v1, v2, v3, v4;                // Vertices zum Sprite rendern
     unsigned char LoadedTilesets;           // Anzahl geladener Sets
     LevelTileStruct Tiles[MAX_LEVELSIZE_X]  // Array mit Leveldaten
@@ -437,14 +440,34 @@ class TileEngineClass {
     WaterSinTableClass WaterSinTable;
 
     // Vorberechnung fürs Levelrendern
+    float RenderLeft = 0.0f;
+    float RenderRight = 640.0f;
+    int RenderHeight = RENDERHEIGHT;
+    bool wideBossArena = false;
+    SplitScreenType levelSplitScreenType = SplitScreenType::Dynamic;
+    bool coopSeparatedX = false;
+    bool coopSeparatedY = false;
+    bool coopSplitLeftRight = true;
+    int coopFirstPlayer = 0;
+    SDL_Rect coopViews[2]{};
+    std::array<glm::vec2, 2> coopLook{};
+    float coopSplitAmount = 0.0f;
+    float coopViewScale = 1.0f;
+    float coopTargetViewScale = 1.0f;
+    float coopSplitAngle = 0.0f;
+    float coopTurnStart = 0.0f;
+    float coopTurnTarget = 0.0f;
+    float coopTurnProgress = 1.0f;
+    void ResetCoopViews();
+    void UpdateCoopViewBounds(int fullWidth);
     int RenderPosX;  // Bereich des Levels, der gerendert wird
     int RenderPosY;
     int RenderPosXTo;
     int RenderPosYTo;
     int xLevel;
     int yLevel;
-    int xTileOffs;
-    int yTileOffs;
+    float xTileOffs;
+    float yTileOffs;
     float xScreen;
     float yScreen;
     float TimelimitSave;  // usprüngliches Zeitlimit
@@ -520,8 +543,38 @@ class TileEngineClass {
     bool LoadLevel(const std::string &Filename);      // Level laden
     void InitNewLevel(int xSize, int ySize);          // Neues Level initialisieren
     void SetScrollSpeed(float xSpeed, float ySpeed);  // neue Scrollspeed setzen
+    struct HorizontalBounds {
+        float left, right;
+        float center() const { return (left + right) * 0.5f; }
+    };
+    HorizontalBounds HorizontalPlayfieldAt(float cameraX, bool wide) const;
+    bool HasWideBossArena() const;
+    void ScrollBossArena(float x, float y, TileStateEnum state = TileStateEnum::SCROLLTOLOCK);
+    float CalculateViewLeft() const;
+    glm::vec2 ClampCameraOrigin(glm::vec2 origin) const;
+    float ViewLeft() const { return RenderLeft; }
+    float ViewRight() const { return RenderRight; }
+    int ViewHeight() const { return RenderHeight; }
+    bool HasFreeCoopCamera() const;
+    SplitScreenType LevelSplitScreenType() const { return levelSplitScreenType; }
+    bool CanSplitCoop() const { return levelSplitScreenType == SplitScreenType::Dynamic && HasFreeCoopCamera(); }
+    void UpdateCoopViews();
+    void AdvanceCoopTransition(float frameSeconds);
+    float CoopSplitAmount() const { return coopSplitAmount; }
+    float CoopViewScale() const { return coopViewScale; }
+    glm::vec2 ExitViewOrigin(glm::vec2 origin, glm::vec2 size, glm::vec2 focus) const;
+    glm::vec2 SharedViewOrigin(float worldScale) const;
+    glm::vec2 CoopSplitNormal() const;
+    glm::vec2 CoopLookOffset(int player, glm::vec2 paneSize) const { return coopLook[player] * paneSize * 0.25f; }
+    glm::vec2 BackdropCamera(glm::vec2 origin, glm::vec2 viewSize) const;
+    bool IsCoopSplit() const { return coopSeparatedX || coopSeparatedY; }
+    const SDL_Rect &CoopView(int player) const { return coopViews[player]; }
+    bool IsInPlayerViews(float left, float top, float right, float bottom, bool widescreen = true) const;
     void CalcRenderRange();                       // Bereiche berechnen, die gerendert werden sollen
+    void CalcRenderRange(float left, int width, int height);
+    void UpdateBackground();
     void DrawBackground();                        // Hintergrund Layer zeichnen
+    void DrawBackground(glm::vec2 crop, glm::vec2 viewSize, glm::vec2 camera);
     void DrawBackLevel();                         // Level hintergrund anzeigen
     void DrawFrontLevel();                        // Level vordergrund anzeigen
     void DrawBackLevelOverlay();                  // Boden Tiles, die verdecken
@@ -533,6 +586,12 @@ class TileEngineClass {
 
     uint32_t BlockRechts(float &x, float y, float &xo, float yo, RECT_struct rect, bool resolve = false);
     uint32_t BlockLinks(float &x, float y, float &xo, float yo, RECT_struct rect, bool resolve = false);
+    bool OverlapsSolidWall(float x, float y, const RECT_struct &rect) const;
+    float ClipWallMotion(float from, float to, float perpendicular, const RECT_struct &rect, bool horizontal,
+                         uint32_t blocking = BLOCKWERT_WAND) const;
+    float ClipVerticalMotion(float from, float to, float x, const RECT_struct &rect) const;
+    float ResolveFloorOverlap(float x, float y, const RECT_struct &rect) const;
+    uint32_t GroundContact(float x, float y, const RECT_struct &rect) const;
     uint32_t BlockOben(float x, float &y, float xo, float &yo, RECT_struct rect, bool resolve = false);
     uint32_t BlockUnten(float x, float &y, float xo, float &yo, RECT_struct rect, bool resolve = false);
     uint32_t BlockUntenNormal(float x, float y, float xo, float yo, RECT_struct rect);
@@ -558,7 +617,7 @@ class TileEngineClass {
 
     void ComputeCoolLight();  // Coole   Lightberechnung
 
-    void DrawShadow();  // Schatten im Alien Level zeichnen
+    void DrawShadow(int viewPlayer = -1);  // Schatten im Alien Level zeichnen
 
     void WertAngleichen(float &nachx, float &nachy, float vonx, float vony);
 

@@ -21,6 +21,7 @@
 // Include Dateien
 // --------------------------------------------------------------------------------------
 
+#include <algorithm>
 #include <cstdio>
 #include <cmath>
 #include <filesystem>
@@ -268,21 +269,21 @@ void SoundManagerClass::Exit() {
 //---------------------------------------------------------------------------------------
 
 void SoundManagerClass::SetVolumes(float sound_vol, float music_vol) {
-    if (sound_vol < 0.0f)
-        sound_vol = 0.0f;
-    else if (sound_vol > 100.0f)
-        sound_vol = 100.0f;
-
-    if (music_vol < 0.0f)
-        music_vol = 0.0f;
-    else if (music_vol > 100.0f)
-        music_vol = 100.0f;
-
-    g_sound_vol = sound_vol;
-    g_music_vol = music_vol;
-
-    // DKS - added to ensure all channels / songs playing reflect the new volume change:
-    ResetAllSoundVolumes();
+    sound_vol = std::clamp(sound_vol, 0.0f, 100.0f);
+    music_vol = std::clamp(music_vol, 0.0f, 100.0f);
+    if (g_sound_vol != sound_vol) {
+        g_sound_vol = sound_vol;
+        for (int i = 0; i < num_channels; ++i)
+            SetChannelVolume(i, channels[i].vol);
+    }
+    if (g_music_vol != music_vol) {
+        g_music_vol = music_vol;
+        // Use equal decibel steps across the slider and reserve zero for silence.
+        constexpr float musicRangeDb = 30.0f;
+        musicMasterGain = music_vol == 0.0f ? 0.0f : std::pow(10.0f, (music_vol / 100.0f - 1.0f) * musicRangeDb / 20.0f);
+        for (int i = 0; i < MAX_SONGS; ++i)
+            SetSongVolume(i, songs[i].vol);
+    }
 }
 
 //---------------------------------------------------------------------------------------
@@ -357,13 +358,12 @@ void SoundManagerClass::PlaySong(int nr, bool resuming_paused_song) {
 
     songs[nr].paused = false;
 
+    SetSongVolume(nr, resuming_paused_song ? songs[nr].vol : 100.0f);
     if (resuming_paused_song) {
         MUSIC_SetPaused(songs[nr].data, false);  // oder Pause aufheben ?
-        SetSongVolume(nr, songs[nr].vol);
     } else {
         // DKS - Added looped parameter under SDL to specify if the song plays looped or not:
         MUSIC_PlaySong(songs[nr].data, songs[nr].looped);  // Von vorne abspielen ?
-        SetSongVolume(nr, 100.0f);
     }
 }
 
@@ -445,23 +445,7 @@ void SoundManagerClass::SetSongVolume(int nr, float volume) {
         return;
 
     songs[nr].vol = volume;
-    MUSIC_SetMasterVolume(songs[nr].data, static_cast<int>(volume * g_music_vol * (2.55f / 100.0f)));
-}
-
-//---------------------------------------------------------------------------------------
-// Name			: SetAbsoluteSongVolume
-// Aufgabe		: aboslute Lautstärke eines Songs setzen
-// Rückgabewert	: keiner
-// Parameter	: Nr		Array-Nummer des Songs
-//				  Volume	Zu setzende Lautstärke
-//---------------------------------------------------------------------------------------
-
-void SoundManagerClass::SetAbsoluteSongVolume(int nr, float volume) {
-    if (!songs[nr].data)
-        return;
-
-    songs[nr].vol = volume;
-    MUSIC_SetMasterVolume(songs[nr].data, static_cast<int>(volume));
+    MUSIC_SetMasterVolume(songs[nr].data, static_cast<int>(std::lround(volume * musicMasterGain * 2.55f)));
 }
 
 // DKS - Added:
